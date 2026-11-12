@@ -20,6 +20,20 @@ from hcclab.server import handler
 
 
 class CandidateStoreTests(unittest.TestCase):
+    def test_pre_versions_are_filtered_before_the_recent_limit(self):
+        with TemporaryDirectory() as directory:
+            store = CandidateStore(Path(directory))
+            mask = np.ones((1, 1, 1), dtype=bool)
+            metadata = {'status': 'unreviewed', 'stage': 'PRE', 'case_id': 'SYNTHETIC',
+                        'series_uid': '1.2.3', 'stack_index': 0, 'source_segment': 2,
+                        'created_utc': '2026-01-01T00:00:00+00:00', 'shape_zyx': [1, 1, 1], 'voxels': 1}
+            mass = store.save(mask, metadata)
+            for _ in range(20):
+                store.save(mask, dict(metadata, source_segment=1, created_utc='2026-01-02T00:00:00+00:00'))
+            self.assertEqual(len(store.list('SYNTHETIC', '1.2.3', 0)), 20)
+            selected = store.list('SYNTHETIC', '1.2.3', 0, source_segment=2)
+            self.assertEqual([item['id'] for item in selected], [mass['id']])
+
     def test_changed_source_pixels_with_same_geometry_cannot_reuse_candidate(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -84,6 +98,7 @@ class CandidateHTTPTests(unittest.TestCase):
     def setUpClass(cls):
         cls.lab = Mock()
         cls.lab.create_candidate.return_value = {'id': 'a' * 32, 'status': 'unreviewed'}
+        cls.lab.create_pre_edit.return_value = {'id': 'b' * 32, 'status': 'unreviewed', 'stage': 'PRE'}
         cls.server = ThreadingHTTPServer(('127.0.0.1', 0), handler(cls.lab))
         cls.thread = Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -94,10 +109,11 @@ class CandidateHTTPTests(unittest.TestCase):
         cls.server.server_close()
         cls.thread.join()
 
-    def request(self, headers, body=b'{}'):
+    def request(self, headers, body=b'{}', path='/api/candidates'):
         self.lab.create_candidate.reset_mock()
+        self.lab.create_pre_edit.reset_mock()
         connection = HTTPConnection('127.0.0.1', self.server.server_port, timeout=5)
-        connection.request('POST', '/api/candidates', body, headers)
+        connection.request('POST', path, body, headers)
         response = connection.getresponse()
         result = response.status, json.loads(response.read())
         connection.close()
@@ -125,4 +141,22 @@ class CandidateHTTPTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 status, _ = self.request(headers, body)
                 self.assertEqual(status, expected)
+                self.lab.create_candidate.assert_not_called()
+
+    def test_pre_edits_use_separate_operation_and_bounded_local_json(self):
+        headers = {'Content-Type': 'application/json'}
+        body = json.dumps({'strokes': ['synthetic-transport-check'] * 1000}).encode()
+        self.assertGreater(len(body), 8192)
+        status, result = self.request(headers, body, '/api/pre-edits')
+        self.assertEqual((status, result['stage']), (201, 'PRE'))
+        self.lab.create_pre_edit.assert_called_once_with(json.loads(body))
+        self.lab.create_candidate.assert_not_called()
+        for extra, body, expected in [({'Origin': 'https://outside.example'}, b'{}', 403),
+                                      ({'Host': 'outside.example'}, b'{}', 403),
+                                      ({'Content-Type': 'text/plain'}, b'{}', 415),
+                                      ({}, b' ' * 131073, 413), ({}, b'{', 422)]:
+            with self.subTest(expected=expected, extra=extra):
+                status, _ = self.request(dict(headers, **extra), body, '/api/pre-edits')
+                self.assertEqual(status, expected)
+                self.lab.create_pre_edit.assert_not_called()
                 self.lab.create_candidate.assert_not_called()

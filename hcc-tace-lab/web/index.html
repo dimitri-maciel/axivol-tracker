@@ -46,6 +46,9 @@
             <header class="viewer-heading"><div><h2 id="pre-title">Baseline</h2><span class="study-stage">Pre-TACE</span></div><time id="pre-date"></time></header>
             <div class="slice" id="pre-viewport" tabindex="0" role="group" aria-label="Baseline CT image. Use up and down arrow keys to scroll slices." aria-busy="true">
               <img id="pre-image" alt="Baseline axial CT" draggable="false" hidden>
+              <canvas id="pre-edit-canvas" class="pre-edit-canvas" aria-hidden="true" hidden></canvas>
+              <svg id="pre-edit-cursor" class="candidate-guides" aria-hidden="true" hidden><ellipse></ellipse></svg>
+              <span id="pre-edit-hint" class="candidate-tool-hint" hidden></span>
               <span class="frame-message" id="pre-image-state" role="status">Loading image…</span>
               <span class="marker a"></span><span class="marker p"></span><span class="marker r"></span><span class="marker l"></span>
               <span id="pre-overlay-label" class="overlay-label" hidden><i></i><span></span></span>
@@ -133,10 +136,22 @@
           <div class="section-heading"><h2>Segmentation</h2><span class="context-tag">Baseline</span></div>
           <label for="segment" class="field-label">Structure</label><select id="segment"></select>
           <label class="toggle-control overlay-toggle" for="show-mask"><input id="show-mask" type="checkbox"><span class="swatch"></span>Show overlay</label>
+          <div class="pre-mask-display"><label for="pre-mask-style" class="field-label">Display</label><select id="pre-mask-style"><option value="combined" selected>Outline + fill</option><option value="outline">Outline</option><option value="fill">Fill</option></select><label for="pre-mask-opacity" class="opacity-label">Fill opacity <output id="pre-mask-opacity-value">15%</output></label><input id="pre-mask-opacity" type="range" min="0" max="60" value="15" step="1"></div>
           <p class="field-hint">Published segmentation from TCIA.</p>
+          <label for="pre-edit-saved" class="field-label pre-version-label">Mask version</label><select id="pre-edit-saved"><option value="">Published segmentation</option></select>
+          <div id="pre-edit-result" class="pre-edit-result" hidden><span class="status-tag">Edited copy · Unreviewed</span><div class="candidate-volume"><strong id="pre-edit-volume">—</strong><span>cm³</span></div><p id="pre-edit-provenance" class="field-hint"></p><a id="pre-edit-export" class="button secondary" download>Download edited mask</a></div>
+          <details id="pre-edit-panel" class="pre-edit-panel"><summary>Edit copy</summary>
+            <p class="field-hint">Paint or erase on the baseline image. Each edit starts from the published mask; the source stays unchanged.</p>
+            <div class="pre-edit-tools" role="group" aria-label="Baseline mask editing tools"><button id="pre-edit-paint" class="button secondary" aria-pressed="false" disabled>Paint</button><button id="pre-edit-erase" class="button secondary" aria-pressed="false" disabled>Erase</button><button id="pre-edit-undo" class="button secondary" disabled>Undo</button><button id="pre-edit-clear" class="button secondary" disabled>Clear edits</button></div>
+            <label class="brush-label" for="pre-edit-radius">Brush radius <span><input id="pre-edit-radius" type="number" min="1" max="20" step="0.1" value="3"> mm</span></label>
+            <p id="pre-edit-count" class="field-hint">No edits</p>
+            <button id="pre-edit-save" class="button primary" disabled>Save edited copy</button>
+            <button id="pre-edit-stop" class="button text-button" hidden>Pause editing</button>
+          </details>
+          <p id="pre-edit-message" class="pre-edit-message" role="status"></p>
         </section>
         <section class="measurement-section" aria-labelledby="measure-title">
-          <h2 id="measure-title">Segmentation volume</h2>
+          <h2 id="measure-title">Published mask volume</h2>
           <div class="volume-display" aria-live="polite"><span id="volume-value">—</span><span class="volume-unit">cm³</span></div>
           <p id="measure-result" class="measurement-message" role="status">Select a structure to calculate its volume.</p>
           <button id="measure" class="button primary" disabled>Calculate volume</button>

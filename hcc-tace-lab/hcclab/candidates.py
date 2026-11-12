@@ -70,7 +70,7 @@ class CandidateStore:
             raise GeometryError('Candidate metadata is inconsistent.')
         return document
 
-    def list(self, case_id, series_uid, stack_index):
+    def list(self, case_id, series_uid, stack_index, *, source_segment=None):
         if not self.root.exists():
             return []
         documents = []
@@ -78,6 +78,9 @@ class CandidateStore:
             if not re.fullmatch(r'[a-f0-9]{32}', path.name):
                 continue
             document = self.metadata(path.name)
+            if source_segment is not None and (document.get('stage') != 'PRE'
+                                                or document.get('source_segment') != source_segment):
+                continue
             if (document['case_id'], document['series_uid'], document['stack_index']) == (case_id, series_uid, stack_index):
                 documents.append(document)
         return sorted(documents, key=lambda d: (d['created_utc'], d['id']), reverse=True)[:20]

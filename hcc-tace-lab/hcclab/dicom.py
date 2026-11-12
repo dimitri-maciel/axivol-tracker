@@ -7,7 +7,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 from pydicom import dcmread
-from pydicom.pixels import apply_rescale, pixel_array
+from pydicom.pixels import apply_rescale, iter_pixels, pixel_array
+from scipy import ndimage
 
 from .geometry import GeometryError, Slice, build_stack, native_volume_cm3
 
@@ -53,6 +54,36 @@ def find_seg(catalog, row):
     return None
 
 
+def verify_pre_sources(stack, seg, *, expected_series_uid, expected_study_uid):
+    """Re-read headers before editing; never pair fresh bytes with cached geometry.
+
+    Manual annotation does not require calibrated HU. Verify only CT identity
+    and its physical grid, then ensure the selected SEG header is unchanged.
+    The caller hashes source bytes before and after decoding/editing to detect
+    changes during the operation. Existing viewer caches are left untouched.
+    """
+    for s in stack.slices:
+        ds = dcmread(s.path, stop_before_pixels=True)
+        if (ds.get('Modality') != 'CT' or int(ds.get('NumberOfFrames', 1)) != 1
+                or str(ds.get('SeriesInstanceUID', '')) != expected_series_uid
+                or str(ds.get('StudyInstanceUID', '')) != expected_study_uid
+                or str(ds.get('SOPInstanceUID', '')) != s.sop
+                or str(ds.get('FrameOfReferenceUID', '')) != s.frame
+                or str(ds.get('AcquisitionNumber', 'Unspecified')) != s.acquisition
+                or (int(ds.get('Rows', 0)), int(ds.get('Columns', 0))) != s.shape):
+            raise GeometryError('CT source identity changed after indexing. Reopen the source data.')
+        for name, expected in [('ImagePositionPatient', s.position),
+                               ('ImageOrientationPatient', s.orientation), ('PixelSpacing', s.spacing)]:
+            actual = np.asarray(ds.get(name, []), dtype=float)
+            if actual.shape != (len(expected),) or not np.allclose(actual, expected, atol=1e-4, rtol=0):
+                raise GeometryError('CT source geometry changed after indexing. Reopen the source data.')
+    path, selected = seg
+    current = dcmread(path, stop_before_pixels=True)
+    if current != selected or current.file_meta != selected.file_meta:
+        raise GeometryError('The selected SEG header changed. Reopen the source data before editing.')
+    return path, current
+
+
 def segment_options(seg):
     return [{'number':int(s.SegmentNumber),'label':str(s.SegmentLabel)} for s in seg.SegmentSequence]
 
@@ -88,10 +119,43 @@ def segment_frames(ds, segment: int):
 
 
 def frame_mask(path, ds, segment, s):
-    frames = [(i,f) for i,f in segment_frames(ds,segment) if s.sop in references(f) and compatible_geometry(ds,f,s)]
+    referenced = [(i,f) for i,f in segment_frames(ds,segment) if s.sop in references(f)]
+    if any(not compatible_geometry(ds, f, s) for _, f in referenced):
+        raise GeometryError('The referenced segmentation frame has incompatible slice geometry.')
+    frames = referenced
     if len(frames)>1:
         raise GeometryError('Multiple segmentation frames reference the same slice.')
     return pixel_array(path,index=frames[0][0]).astype(bool) if frames else None
+
+
+def referenced_mask(path, ds, segment, stack):
+    """Load the exact published binary mask on its referenced acquisition grid.
+
+    Decode the selected frames in one pass. Missing frames are treated as empty
+    only where there is no source reference; every supplied frame must match
+    exactly one CT slice, including physical geometry.
+    """
+    by_sop = {s.sop: (z, s) for z, s in enumerate(stack.slices)}
+    mapping = {}
+    used = set()
+    for idx, frame in segment_frames(ds, segment):
+        hits = [by_sop[uid] for uid in references(frame) & by_sop.keys()]
+        if len(hits) != 1 or hits[0][0] in used or not compatible_geometry(ds, frame, hits[0][1]):
+            raise GeometryError('Segmentation references do not match this acquisition.')
+        mapping[idx] = hits[0][0]
+        used.add(hits[0][0])
+    if not mapping:
+        raise GeometryError('The selected segment has no referenced frames.')
+    shape = (len(stack.slices), *stack.slices[0].shape)
+    if np.prod(shape) > 64_000_000:
+        raise GeometryError('The segmentation exceeds the 64,000,000-voxel limit.')
+    mask = np.zeros(shape, dtype=bool)
+    indices = sorted(mapping)
+    for idx, pixels in zip(indices, iter_pixels(path, indices=indices)):
+        if pixels.shape != shape[1:]:
+            raise GeometryError('Segmentation frame dimensions do not match the acquisition.')
+        mask[mapping[idx]] = pixels.astype(bool)
+    return mask
 
 
 def mask_volume(path, ds, segment: int, stack):
@@ -117,7 +181,30 @@ def mask_volume(path, ds, segment: int, stack):
             'source':'Published TCIA binary segmentation. Physical segment volume; not a measure of viability.'}
 
 
-def render_slice(s, *, level=50, width=350, mask=None):
+def mask_display(window, mask, *, style='fill', opacity=45):
+    """Visual overlay only: never smooth, dilate, or modify the source mask.
+
+    The outline is a one-voxel *inner* boundary, including holes and image-edge
+    foreground. Opacity controls the interior; the outline remains legible.
+    """
+    if style not in ('fill', 'outline', 'combined'):
+        raise ValueError('Mask style must be fill, outline or combined.')
+    if type(opacity) is not int or not 0 <= opacity <= 100:
+        raise ValueError('Mask opacity must be an integer from 0 to 100.')
+    if mask.shape != window.shape or mask.dtype != np.bool_:
+        raise GeometryError('Segmentation dimensions or type do not match the slice.')
+    rgb = np.repeat(window[..., None], 3, axis=2)
+    color = np.array([50, 213, 222])
+    if style in ('fill', 'combined'):
+        alpha = opacity / 100
+        rgb[mask] = np.rint(rgb[mask] * (1 - alpha) + color * alpha).astype(np.uint8)
+    if style in ('outline', 'combined'):
+        edge = mask & ~ndimage.binary_erosion(mask, structure=ndimage.generate_binary_structure(2, 1), border_value=0)
+        rgb[edge] = np.rint(window[edge][:, None] * .1 + color * .9).astype(np.uint8)
+    return rgb
+
+
+def render_slice(s, *, level=50, width=350, mask=None, mask_style='fill', mask_opacity=45):
     ds = dcmread(s.path)
     hu = np.asarray(apply_rescale(pixel_array(ds),ds), dtype=np.float32)
     if hu.shape!=s.shape or not np.isfinite(hu).all():
@@ -127,11 +214,7 @@ def render_slice(s, *, level=50, width=350, mask=None):
         window = 255-window
     im = Image.fromarray(window)
     if mask is not None:
-        if mask.shape!=window.shape:
-            raise GeometryError('Segmentation dimensions do not match the slice.')
-        rgb = np.repeat(window[...,None],3,axis=2)
-        rgb[mask] = np.rint(rgb[mask]*.55 + np.array([50,213,222])*.45).astype(np.uint8)
-        im = Image.fromarray(rgb)
+        im = Image.fromarray(mask_display(window, mask, style=mask_style, opacity=mask_opacity))
     out = BytesIO()
     im.save(out,format='PNG')
     return out.getvalue()

@@ -28,7 +28,7 @@ These are design inputs, not a certification or a claim of full conformity. Repr
 - Linked scrolling uses relative slice position; it does not imply anatomical registration.
 - Changing case, series, acquisition or segment immediately clears the previous measurement.
 - Measurement requires unique segment references and compatible geometry. Missing or mismatched references produce an explicit error.
-- Follow-up segmentation and volume change remain unavailable. No clinical response is inferred.
+- Follow-up candidates can be generated, but expert reference segmentation and volume change remain unavailable. No clinical response is inferred.
 - During slice loading, the previous image remains visible with a loading indicator. Its counter and overlay label change with the decoded image.
 - Export is disabled while images are unresolved. Failed loads hide the stale image; a view change invalidates an in-progress PNG export.
 - Focus an image for mouse-wheel or arrow-key scrolling. Zoom is independent; drag to pan. Reset display restores zoom and the existing 350/50 window/level defaults.
@@ -38,7 +38,15 @@ These are design inputs, not a certification or a claim of full conformity. Repr
 
 The browser module **web/frame-loader.js** requests one image at a time, replaces queued intermediate slices with the latest request, and prefetches up to three neighbors in each direction while idle. Its 48-frame LRU cache pins displayed images. Changing case clears the cache and revokes blob URLs.
 
-**Lab.image** caches up to 192 PNGs. Its key includes series, acquisition, slice, window, level and segment. Neither cache changes DICOM pixels, mask references or measurement geometry. Downloaded DICOM files remain read-only and excluded from Git and the image build context.
+**Lab.image** caches up to 192 PNGs. Its key includes series, acquisition, slice, window, level, segment or candidate, mask style and opacity. Neither cache changes DICOM pixels, mask references or measurement geometry. Downloaded DICOM files remain read-only and excluded from Git and the image build context.
+
+## Baseline mask review
+
+The default overlay combines an inner one-pixel outline with 15% fill. **Outline**, **Outline + fill**, **Fill** and opacity controls change presentation only. No edge smoothing or automatic shrinking is applied.
+
+**Edit copy** starts from the published segment. Paint and erase use a physical brush radius, apply to one slice at a time and support undo. Zoom returns to 100% and pan is disabled while editing, so image coordinates remain explicit. The editor rejects stale mask loads and save results after source changes. Saving creates a separate unreviewed version; the published measurement remains unchanged. Saved versions can be previewed and exported, and new edit sessions begin from the original.
+
+`tests/ui_pre_mask.cjs` exercises the real baseline viewport, brush coordinates, mask display, undo, immutable saving, source changes and the separate report fields. Run it against an isolated QA instance with `AXIVOL_URL`; it creates engineering test edits, not clinical annotations.
 
 ## Verification
 

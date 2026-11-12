@@ -10,6 +10,7 @@
 | `dicom.py` | Lectura de píxeles, referencias DICOM SEG y representación de cortes. |
 | `volume.py` | Carga cuantitativa HU, exclusión de padding y validación de la rejilla CT nativa. |
 | `segmentation.py` | Componente conexa de una semilla dentro de ROI y rango HU, independiente de archivos e interfaz. |
+| `mask_editing.py` | Correcciones manuales sobre una copia binaria, con pincel en milímetros y trazos reproducibles. |
 | `candidates.py` | Persistencia inmutable, integridad y exportación de candidatos con procedencia. |
 | `lab.py` | Operaciones de la aplicación compartidas por servidor y pruebas. |
 | `server.py` | Adaptador HTTP para las operaciones y los archivos estáticos. |
@@ -27,6 +28,8 @@ El volumen Docker `annotations` conserva candidatos nuevos en `/annotations`, se
 
 El primer método POST es crecimiento por umbral con conectividad de seis vecinos, implementado con SciPy. No emplea la máscara PRE, no remuestrea la adquisición ni aprende parámetros de pacientes. Se limita el volumen a 64 millones de vóxeles y la ROI a cuatro millones. Las razones, ecuaciones y limitaciones se explican en la [guía de segmentación](post-segmentation.md).
 
+Las ediciones PRE parten del SEG publicado y usan su rejilla de referencias exactas. Se guardan como candidatos `PRE` separados, con hash del SEG y de las imágenes, segmento fuente, trazos y conteos de cambios. El navegador y el servidor usan la misma distancia física al trazo. El contorno mostrado es interior: no expande ni suaviza la máscara. Los detalles están en la [guía de revisión PRE](pre-mask-review.md).
+
 ## Medición y procedencia
 
 - Las adquisiciones de una misma serie se separan antes de ordenar sus cortes.
@@ -35,7 +38,7 @@ El primer método POST es crecimiento por umbral con conectividad de seis vecino
 - Cada resultado identifica caso, adquisición, etiqueta, conteo de vóxeles y geometría.
 - Una máscara PRE no se utiliza para inferir el volumen POST ni una respuesta al tratamiento.
 - Los estados de referencias ausentes, geometría incompatible y comparación pendiente se presentan explícitamente.
-- Una máscara nueva se identifica como candidata sin revisar. Su volumen aparece en `post_candidate`, separado de una referencia clínica; no habilita porcentajes de respuesta.
+- Una máscara nueva se identifica como candidata sin revisar. Su volumen aparece en `post_candidate` o `pre_edited_candidate`, separado de la medición publicada; no habilita porcentajes de respuesta.
 
 ## Interfaz y pruebas
 

@@ -1,5 +1,6 @@
 import {FrameLoader} from './frame-loader.js';
 import {createSegmentationEditor} from './segmentation-editor.js';
+import {createPreMaskEditor} from './pre-mask-editor.js';
 
 const $ = id => document.getElementById(id);
 const frames = new FrameLoader();
@@ -25,6 +26,18 @@ const editor = createSegmentationEditor({
     $('post-image').hidden = true;
     $('post-overlay-label').hidden = true;
     showSlice('post');
+  },
+});
+const preEditor = createPreMaskEditor({
+  ready: () => !!state.views.pre?.ready,
+  displayedIndex: () => state.views.pre?.displayedIndex,
+  resetZoom: () => setZoom('pre', 1),
+  updateTransform: () => updateTransform('pre'),
+  changed: () => reportLink(),
+  refreshImage() {
+    $('pre-image').hidden = true;
+    $('pre-overlay-label').hidden = true;
+    showSlice('pre');
   },
 });
 
@@ -57,6 +70,12 @@ function selectedSegment() {
   return state.views.pre?.summary.segments.find(s => String(s.number) === $('segment').value);
 }
 
+function updatePreEditorSource() {
+  const stack = selection('pre'), segment = selectedSegment();
+  preEditor.setSource(stack && segment ? {...stack, case_id: state.case.id,
+    series_uid: state.views.pre.uid, stack_index: stack.index, segment: segment.number, label: segment.label} : null);
+}
+
 function reportLink() {
   const available = state.case && stages.every(stage => state.views[stage]?.ready);
   $('capture').disabled = !available;
@@ -72,6 +91,7 @@ function reportLink() {
   });
   if ($('segment').value) query.set('segment', $('segment').value);
   if (editor.candidate) query.set('candidate', editor.candidate.id);
+  if (preEditor.candidate) query.set('pre_candidate', preEditor.candidate.id);
   $('report').href = '/api/report?' + query;
 }
 
@@ -81,6 +101,7 @@ function syncActions() {
     || !selectedSegment() || !stack?.interval_mm;
   $('show-mask').disabled = !selectedSegment();
   editor.sync();
+  preEditor.sync();
   reportLink();
 }
 
@@ -108,6 +129,10 @@ function updateTransform(stage) {
   element(stage, 'zoom-out').disabled = display.zoom <= 1 || !state.views[stage]?.ready;
   element(stage, 'zoom-in').disabled = display.zoom >= 3 || !state.views[stage]?.ready;
   if (stage === 'post') editor.drawGuides();
+  if (stage === 'pre' && preEditor.editing) {
+    element(stage, 'zoom-in').disabled = true;
+    element(stage, 'zoom-out').disabled = true;
+  }
 }
 
 function setZoom(stage, zoom) {
@@ -137,10 +162,15 @@ async function showSlice(stage) {
     stack: String(stack.index), index: String(index),
     level: String(state.window.level), width: String(state.window.width),
   });
-  const segment = stage === 'pre' && $('show-mask').checked ? selectedSegment() : null;
+  const segment = stage === 'pre' && $('show-mask').checked && !preEditor.editing && !preEditor.candidate ? selectedSegment() : null;
   if (segment) query.set('segment', segment.number);
-  const candidateId = stage === 'post' ? editor.overlayId : null;
+  const candidateId = stage === 'post' ? editor.overlayId
+    : !preEditor.editing && $('show-mask').checked ? preEditor.candidate?.id : null;
   if (candidateId) query.set('candidate', candidateId);
+  if (stage === 'pre' && (segment || candidateId)) {
+    query.set('mask_style', preEditor.presentation.style);
+    query.set('mask_opacity', preEditor.presentation.opacity);
+  }
   element(stage, 'index').setAttribute('aria-valuetext', 'Requested slice ' + (index + 1) + ' of ' + stack.slices);
   element(stage, 'prev').disabled = index === 0;
   element(stage, 'next').disabled = index + 1 >= stack.slices;
@@ -153,6 +183,7 @@ async function showSlice(stage) {
   frameState(stage, 'Loading slice ' + (index + 1) + '…');
   syncActions();
   if (stage === 'post') editor.drawGuides();
+  if (stage === 'pre') preEditor.frameLoading();
   const image = new Image();
   image.id = stage + '-image';
   image.alt = (stage === 'pre' ? 'Baseline' : 'Follow-up') + ' CT, slice ' + (index + 1) + ' of ' + stack.slices;
@@ -172,12 +203,13 @@ async function showSlice(stage) {
     element(stage, 'counter').textContent = (index + 1) + ' / ' + stack.slices;
     element(stage, 'index').setAttribute('aria-valuetext', 'Slice ' + (index + 1) + ' of ' + stack.slices);
     if (stage === 'pre') {
-      $('pre-overlay-label').hidden = !segment;
-      $('pre-overlay-label').querySelector('span').textContent = segment?.label || '';
+      $('pre-overlay-label').hidden = !$('show-mask').checked || !selectedSegment();
+      $('pre-overlay-label').querySelector('span').textContent = preEditor.overlayLabel;
     }
     frameState(stage, '');
     updateTransform(stage);
     if (stage === 'post') editor.frameChanged(index, candidateId);
+    if (stage === 'pre') preEditor.frameChanged();
     const neighbors = [];
     for (const offset of [1, -1, 2, -2, 3, -3]) {
       if (index + offset < 0 || index + offset >= stack.slices) continue;
@@ -210,7 +242,7 @@ function changeStack(stage) {
   state.display[stage] = {zoom: 1, x: 0, y: 0};
   state.views[stage].ready = false;
   state.views[stage].displayedIndex = null;
-  if (stage === 'pre') resetMeasurement();
+  if (stage === 'pre') { updatePreEditorSource(); resetMeasurement(); }
   if (stage === 'post') editor.setSource({
     ...stack, case_id: state.case.id, series_uid: state.views.post.uid, stack_index: stack.index,
   });
@@ -228,6 +260,7 @@ async function loadSeries(stage, epoch) {
   const serial = ++state.requested[stage];
   ++state.imageRequest[stage];
   delete state.views[stage];
+  if (stage === 'pre') preEditor.setSource(null);
   if (stage === 'post') editor.setSource(null);
   setStudyControls(stage, true);
   element(stage, 'image').hidden = true;
@@ -279,6 +312,7 @@ async function loadCase(id) {
   frames.clear();
   state.views = {};
   state.case = null;
+  preEditor.setSource(null);
   editor.setSource(null);
   resetMeasurement();
   $('review').hidden = true;
@@ -364,6 +398,7 @@ for (const stage of stages) {
   let drag = null;
   viewport.addEventListener('pointerdown', event => {
     if (stage === 'post' && editor.selecting) return;
+    if (stage === 'pre' && preEditor.editing) return;
     if (state.display[stage].zoom <= 1 || !state.views[stage]?.ready || event.button !== 0) return;
     viewport.focus();
     drag = {x: event.clientX, y: event.clientY, ...{panX: state.display[stage].x, panY: state.display[stage].y}};
@@ -386,9 +421,13 @@ for (const stage of stages) {
 
 $('case').addEventListener('change', e => loadCase(e.target.value));
 $('link').addEventListener('change', e => { $('link-note').hidden = !e.target.checked; });
-$('show-mask').addEventListener('change', () => showSlice('pre'));
+$('show-mask').addEventListener('change', () => {
+  $('pre-overlay-label').hidden = !$('show-mask').checked || !selectedSegment();
+  preEditor.overlayChanged();
+});
 $('segment').addEventListener('change', () => {
   $('show-mask').checked = !!selectedSegment();
+  updatePreEditorSource();
   resetMeasurement();
   showSlice('pre');
 });
@@ -451,6 +490,7 @@ function viewSignature() {
     epoch: state.epoch, image: state.imageRequest, measure: state.measureRequest,
     display: state.display, volume: $('volume-value').textContent,
     candidate: editor.signature,
+    preEdits: preEditor.signature,
   });
 }
 $('capture').addEventListener('click', async () => {

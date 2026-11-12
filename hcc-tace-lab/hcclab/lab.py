@@ -1,16 +1,20 @@
 """Application operations shared by the HTTP interface and integration checks."""
 from functools import lru_cache
 from pathlib import Path
+from io import BytesIO
 from datetime import datetime, timezone
 from threading import Lock
 import importlib.metadata
 import time
+import numpy as np
+from PIL import Image
 
 from .candidates import CandidateStore, file_sha256, stack_identity
 from .catalog import Catalog
-from .dicom import default_segment, find_seg, frame_mask, mask_volume, render_slice, segment_options, stacks
+from .dicom import default_segment, find_seg, frame_mask, mask_volume, referenced_mask, render_slice, segment_options, stacks, verify_pre_sources
 from .geometry import GeometryError, native_volume_cm3
 from .segmentation import grow_region
+from .mask_editing import apply_strokes
 from .volume import load_hu_volume
 from .tcia import COLLECTION, DOI
 
@@ -56,13 +60,17 @@ class Lab:
                            'orientation_labels':orientation_labels(s.slices[0])}
                           for i,s in enumerate(stacks(self.catalog.folder(row),uid))]}
 
-    def image(self, uid, stack_index, slice_index, level, width, segment=None, candidate_id=None):
+    def image(self, uid, stack_index, slice_index, level, width, segment=None, candidate_id=None,
+              mask_style='fill', mask_opacity=45):
+        if mask_style not in ('fill', 'outline', 'combined') or type(mask_opacity) is not int or not 0 <= mask_opacity <= 100:
+            raise ValueError('Invalid mask display style or opacity.')
         if candidate_id is not None:
             self.candidate_for_stack(candidate_id, uid, stack_index)
-        return self._image(uid, stack_index, slice_index, level, width, segment, candidate_id)
+        return self._image(uid, stack_index, slice_index, level, width, segment, candidate_id, mask_style, mask_opacity)
 
     @lru_cache(maxsize=192)
-    def _image(self, uid, stack_index, slice_index, level, width, segment=None, candidate_id=None):
+    def _image(self, uid, stack_index, slice_index, level, width, segment=None, candidate_id=None,
+               mask_style='fill', mask_opacity=45):
         row, st = self.stack(uid,stack_index)
         if not 0<=slice_index<len(st.slices):
             raise KeyError('Slice index is outside this acquisition.')
@@ -77,7 +85,98 @@ class Lab:
             if not seg:
                 raise GeometryError('No published segmentation is available for this series.')
             mask = frame_mask(*seg,segment,s)
-        return render_slice(s,level=level,width=width,mask=mask)
+        return render_slice(s,level=level,width=width,mask=mask,mask_style=mask_style,mask_opacity=mask_opacity)
+
+    def mask_image(self, uid, stack_index, slice_index, segment=None, candidate_id=None):
+        """Binary PNG for the local editor; grayscale 255 is foreground."""
+        row, stack = self.stack(uid, stack_index)
+        if not 0 <= slice_index < len(stack.slices):
+            raise ValueError('Slice index is outside this acquisition.')
+        if candidate_id:
+            if segment is not None:
+                raise ValueError('Select a source segment or an edited copy, not both.')
+            self.candidate_for_stack(candidate_id, uid, stack_index)
+            mask = self.candidates.mask(candidate_id)[slice_index]
+        else:
+            seg = find_seg(self.catalog, row)
+            if segment is None or seg is None:
+                raise GeometryError('Select a published segment for editing.')
+            mask = frame_mask(*seg, segment, stack.slices[slice_index])
+            if mask is None:
+                mask = np.zeros(stack.slices[slice_index].shape, dtype=bool)
+        output = BytesIO()
+        Image.fromarray(mask.astype(np.uint8) * 255).save(output, format='PNG')
+        return output.getvalue()
+
+    def pre_stack(self, case_id, uid, stack_index):
+        case = self.catalog.case(case_id)
+        if not case['chronological_pair'] or uid not in {s['uid'] for s in case['studies'][0]['series']}:
+            raise GeometryError('Select a baseline CT series from this case.')
+        if type(stack_index) is not int or stack_index < 0:
+            raise ValueError('stack_index must be a non-negative integer.')
+        return self.stack(uid, stack_index)
+
+    def list_pre_edits(self, case_id, uid, stack_index, segment):
+        self.pre_stack(case_id, uid, stack_index)
+        return {'candidates': self.candidates.list(case_id, uid, stack_index, source_segment=segment)}
+
+    def create_pre_edit(self, payload):
+        required = {'case_id', 'series_uid', 'stack_index', 'segment', 'strokes'}
+        if not isinstance(payload, dict) or set(payload) != required:
+            raise ValueError('Provide case_id, series_uid, stack_index, segment and strokes.')
+        case_id, uid, index, segment = (payload[k] for k in ('case_id', 'series_uid', 'stack_index', 'segment'))
+        if not isinstance(case_id, str) or not isinstance(uid, str) or type(segment) is not int or segment < 1:
+            raise ValueError('Invalid source identifiers or segment number.')
+        row, stack = self.pre_stack(case_id, uid, index)
+        if stack.interval_mm is None:
+            raise GeometryError('Uniform slice spacing is required to measure an edited copy.')
+        seg = find_seg(self.catalog, row)
+        if not seg:
+            raise GeometryError('No published segmentation is available for this acquisition.')
+        if not payload['strokes']:
+            raise ValueError('Make a correction before saving an edited copy.')
+        if not self.segmentation_lock.acquire(blocking=False):
+            raise ValueError('A mask operation is running. Wait for it to finish.')
+        try:
+            source_hashes = tuple(file_sha256(s.path) for s in stack.slices)
+            seg_hash = file_sha256(seg[0])
+            seg = verify_pre_sources(stack, seg, expected_series_uid=uid,
+                                     expected_study_uid=row['StudyInstanceUID'])
+            original = referenced_mask(*seg, segment, stack)
+            edited, diagnostics = apply_strokes(original, stack.slices[0].spacing, payload['strokes'])
+            if diagnostics['added_voxels'] + diagnostics['removed_voxels'] == 0:
+                raise ValueError('The strokes do not change the published mask. Adjust the correction before saving.')
+            if seg_hash != file_sha256(seg[0]) or source_hashes != tuple(file_sha256(s.path) for s in stack.slices):
+                raise GeometryError('Source files changed during editing. Reload the acquisition.')
+            label = next(item['label'] for item in segment_options(seg[1]) if item['number'] == segment)
+            first = stack.slices[0]
+            metadata = {
+                'schema_version': 1, 'status': 'unreviewed', 'stage': 'PRE',
+                'created_utc': datetime.now(timezone.utc).isoformat(), 'case_id': case_id,
+                'series_uid': uid, 'stack_index': index, 'acquisition': first.acquisition,
+                'label': 'Edited ' + label, 'source_segment': segment, 'source_segment_label': label,
+                'source_seg_sop_uid': str(seg[1].SOPInstanceUID), 'source_seg_sha256': seg_hash,
+                'target': 'User-edited copy of a published segment; changes require expert review',
+                'parameters': {'strokes': payload['strokes']}, 'shape_zyx': list(edited.shape),
+                'voxels': diagnostics['voxels'],
+                'volume_cm3': native_volume_cm3(diagnostics['voxels'], first.spacing, stack.interval_mm),
+                'original_voxels': int(original.sum()), 'diagnostics': diagnostics,
+                'method': {'name': 'manual_brush_edit', 'version': '1.0.0', 'resampling': False,
+                           'brush_units': 'mm', 'point_order': 'y,x',
+                           'implementation_sha256': {'mask_editing.py': file_sha256(Path(__file__).with_name('mask_editing.py'))}},
+                'source': {'collection': COLLECTION, 'dataset_doi': DOI, 'study_uid': row['StudyInstanceUID'],
+                           'frame_of_reference_uid': first.frame, 'stack_identity': stack_identity(stack),
+                           'axis_order': 'z,y,x', 'row_column_spacing_mm': first.spacing,
+                           'slice_interval_mm': stack.interval_mm, 'orientation_patient': first.orientation,
+                           'slices': [{'index': i, 'sop_uid': s.sop, 'position_patient_mm': s.position,
+                                       'sha256': source_hashes[i]} for i, s in enumerate(stack.slices)]},
+                'software': {name: importlib.metadata.version(name) for name in ('numpy', 'pydicom')},
+                'warnings': ['Edited copy. Changes require expert review. The published mask is preserved.'],
+                'scope': 'Manual PRE correction candidate; not a replacement clinical reference or treatment-response measurement.',
+            }
+            return self.candidates.save(edited, metadata)
+        finally:
+            self.segmentation_lock.release()
 
     def post_stack(self, case_id, uid, stack_index):
         """Chronology is necessary to label POST, but does not verify phase."""
@@ -102,23 +201,37 @@ class Lab:
         document = self.candidates.metadata(candidate_id)
         if document['series_uid'] != uid or document['stack_index'] != stack_index:
             raise GeometryError('This candidate belongs to a different acquisition.')
-        _, stack = self.post_stack(document['case_id'], uid, stack_index)
+        stage = document.get('stage', 'POST')
+        if stage not in ('PRE', 'POST'):
+            raise GeometryError('Candidate stage is invalid.')
+        operation = self.pre_stack if stage == 'PRE' else self.post_stack
+        row, stack = operation(document['case_id'], uid, stack_index)
         if document['source']['stack_identity'] != stack_identity(stack):
             raise GeometryError('The source geometry or slice references have changed.')
         # Cheap file stats invalidate the hash check without rehashing 97+ CT
         # files for every scroll event. Source files are read-only in the app.
         version = tuple((s.path.stat().st_size, s.path.stat().st_mtime_ns, s.path.stat().st_ino)
                         for s in stack.slices)
+        if stage == 'PRE':
+            seg = find_seg(self.catalog, row)
+            if seg is None or str(seg[1].SOPInstanceUID) != document['source_seg_sop_uid']:
+                raise GeometryError('The published source segmentation has changed.')
+            stat = seg[0].stat()
+            version += ((stat.st_size, stat.st_mtime_ns, stat.st_ino),)
         self.verify_candidate_sources(candidate_id, version)
         return document
 
     @lru_cache(maxsize=16)
     def verify_candidate_sources(self, candidate_id, source_version):
         document = self.candidates.metadata(candidate_id)
-        _, stack = self.stack(document['series_uid'], document['stack_index'])
+        row, stack = self.stack(document['series_uid'], document['stack_index'])
         current = tuple(file_sha256(s.path) for s in stack.slices)
         if current != tuple(s['sha256'] for s in document['source']['slices']):
             raise GeometryError('Source CT files differ from those used for this candidate. Generate a new candidate.')
+        if document.get('stage') == 'PRE':
+            seg = find_seg(self.catalog, row)
+            if seg is None or file_sha256(seg[0]) != document['source_seg_sha256']:
+                raise GeometryError('The published source segmentation differs from the edited copy source.')
 
     def voxel(self, uid, stack_index, z, y, x):
         """Expose one calibrated intensity to help choose explicit HU limits."""
@@ -204,7 +317,7 @@ class Lab:
             raise GeometryError('No published DICOM SEG is available for this series.')
         return mask_volume(*seg,segment,st)
 
-    def report(self, case_id, pre_uid, pre_stack, post_uid, post_stack, segment=None, candidate_id=None):
+    def report(self, case_id, pre_uid, pre_stack, post_uid, post_stack, segment=None, candidate_id=None, pre_candidate_id=None):
         case = self.catalog.case(case_id)
         if not case['chronological_pair']:
             raise GeometryError('A baseline and follow-up pair could not be established.')
@@ -225,10 +338,14 @@ class Lab:
             except GeometryError as error:
                 issue = str(error)
         candidate = self.candidate_for_stack(candidate_id, post_uid, post_stack) if candidate_id else None
+        pre_candidate = self.candidate_for_stack(pre_candidate_id, pre_uid, pre_stack) if pre_candidate_id else None
+        if pre_candidate and pre_candidate['source_segment'] != segment:
+            raise GeometryError('The edited copy belongs to a different baseline segment.')
         return {'collection':COLLECTION,'dataset_doi':DOI,'case':case_id,'studies':rows,
                 'pre_segmentation_measurement':measured,'pre_measurement_issue':issue,
                 'post_segmentation_measurement':None,'volume_change_percent':None,
                 'post_candidate':candidate,
+                'pre_edited_candidate':pre_candidate,
                 'status':'comparison_pending',
                 'pending':['Review contrast phases and coverage','Evaluate registration','Verify lesion correspondence and follow-up segmentation'],
                 'scope':'Development build: published segmentation volume does not establish treatment response.'}
