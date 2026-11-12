@@ -18,6 +18,8 @@ Proyecto de titulación de **Dimitri Maciel**, Maestría en Ciencias Computacion
 
 La interfaz en inglés permite revisar los estudios Baseline y Follow-up, explorar adquisiciones, ajustar ventana y nivel, ampliar las imágenes y superponer una segmentación DICOM SEG publicada. El volumen se calcula en la geometría original. La navegación prioriza el último corte solicitado y precarga los cortes cercanos. Los datos permanecen en el equipo que ejecuta la aplicación.
 
+![Axivol Tracker: caso HCC_002](output/ui/axivol-desktop.png)
+
 La [verificación de la interfaz](output/ui/README.md) incluye pruebas funcionales, accesibilidad automática y tiempos de navegación.
 
 El conjunto descargado en el entorno de desarrollo contiene 105 casos y 677 series. El ejemplo de volumetría corresponde al caso **HCC_002, adquisición PRE 1, etiqueta Mass (segmento 2)**: 324 430 vóxeles, 109 cortes vinculados y **495,04 cm³**. Es una comprobación técnica de lectura y medición de la máscara publicada.

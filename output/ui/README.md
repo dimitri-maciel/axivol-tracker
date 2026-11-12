@@ -1,6 +1,6 @@
 # Interface verification
 
-The locally generated screenshots show the public HCC_002 case from HCC-TACE-Seg, baseline acquisition 1, published SEG label Mass (segment 2), with window 350 and level 50. The measured segmentation volume is 495.04 cm³ (324,430 voxels, 109 referenced slices). The follow-up image is shown without a segmentation. No registration or treatment-response result is represented.
+The screenshots show the public HCC_002 case from HCC-TACE-Seg, baseline acquisition 1, published SEG label Mass (segment 2), with window 350 and level 50. The measured segmentation volume is 495.04 cm³ (324,430 voxels, 109 referenced slices). The follow-up image is shown without a segmentation. No registration or treatment-response result is represented.
 
 - Desktop: baseline slice 76/109 and follow-up slice 49/97.
 - Mobile: baseline slice 73/109 and follow-up slice 46/97.
