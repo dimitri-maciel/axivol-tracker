@@ -8,6 +8,16 @@ node_modules/
 .env.*
 !.env.example
 .DS_Store
+# Generated artifacts and local presentation materials
+output/
+/poster/
+/docs/Guion_presentacion_5_minutos.txt
+.pytest_cache/
+.ruff_cache/
+coverage/
+playwright-report/
+test-results/
+*.log
 *.dcm
 *.ima
 *.nii

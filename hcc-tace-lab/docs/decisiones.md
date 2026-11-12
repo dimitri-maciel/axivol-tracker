@@ -1,9 +1,36 @@
-# Decisiones de diseño y revisión
+# Arquitectura y decisiones técnicas
 
-**Capas de código.** `geometry.py` expresa reglas físicas comprobables sin servidor ni navegador. `catalog.py` y `dicom.py` acceden al catálogo, píxeles y máscaras. `lab.py` coordina operaciones. `server.py` y `web/` se limitan a peticiones, presentación y controles. Se sigue la [separación presentación, dominio y datos de Fowler](https://martinfowler.com/bliki/PresentationDomainDataLayering.html). Docker distingue un trabajo de ingesta con escritura de un visor que lee el corpus. No se necesita una base SQL para inspeccionar imágenes: el corpus DICOM y su manifiesto son la fuente de datos de esta etapa.
+## Capas
 
-**Interfaz.** La diapositiva 6 de la exposición dio la comparación lado a lado, el fondo oscuro y el código de color PRE/POST. Se conserva lo que ayuda a identificar cada estudio y se eliminan tarjetas de métricas no implementadas. Se aplica [divulgación progresiva](https://www.nngroup.com/articles/progressive-disclosure/): primero caso, cortes y máscara; luego series, adquisiciones y ventana/nivel. El [comparador de estudios de OHIF](https://v3p10.docs.ohif.org/platform/extensions/modules/hpModule/) aporta una referencia del patrón actual/anterior. Los estados pendientes explican qué evidencia falta. El usuario no ve porcentajes de respuesta ni índices de confianza de ejemplo en el visor con datos reales.
+| Módulo | Responsabilidad |
+| --- | --- |
+| `tcia.py` | Catálogo, descarga y verificación de archivos de TCIA. |
+| `geometry.py` | Orden físico de cortes, compatibilidad espacial y volumen. No accede al navegador ni a la red. |
+| `catalog.py` | Consulta del manifiesto y disponibilidad de estudios locales. |
+| `dicom.py` | Lectura de píxeles, referencias DICOM SEG y representación de cortes. |
+| `lab.py` | Operaciones de la aplicación compartidas por servidor y pruebas. |
+| `server.py` | Adaptador HTTP para las operaciones y los archivos estáticos. |
+| `web/` | Presentación, controles y carga de imágenes en el navegador. |
 
-**Código y revisión en Codex.** `AGENTS.md` documenta las reglas científicas y los comandos de verificación de este repositorio. La skill instalada `review-agent` es la opción adecuada para revisar un diff de forma independiente y de solo lectura: buscar defectos reproducibles, comprobar pruebas y seguir revisando aunque ya se haya encontrado uno. Para decisiones específicas sobre Codex, usar `openai-docs`; para maquetar y comprobar el póster, `Presentations` y `PDF`. `Imagegen` sirve para material ilustrativo identificado; el visor de investigación usa píxeles DICOM. No se necesita una skill de plantillas ni instalar más plugins para estas tareas. La revisión de esta entrega verificó la geometría, las referencias SEG, la coherencia del reporte y la exclusión de datos de Git.
+Esta separación permite comprobar la geometría sin abrir el visor y cambiar la presentación sin modificar las reglas de medición. Sigue el principio de [separación entre presentación, dominio y datos](https://martinfowler.com/bliki/PresentationDomainDataLayering.html).
 
-**Póster.** Las guías de [NIH](https://www.training.nih.gov/creating-a-scientific-poster/) y [Carnegie Mellon](https://www.cmu.edu/student-success/other-resources/handouts/comm-supp-pdfs/designing-scientific-poster-summary.pdf) recomiendan una jerarquía que se pueda recorrer rápidamente, figuras con propósito y espacio libre. La versión posterior alterna un encabezado anatómico, un diagrama de etapas, una comparación compacta de antecedentes, un bloque de avances y una vista del visor Docker. La captura corresponde a un caso público, con atribución TCIA. Los resultados del caso piloto no se presentan como desempeño en la cohorte.
+## Almacenamiento y contenedores
+
+El corpus DICOM y su manifiesto son la fuente de datos. Esta etapa no requiere una base SQL: se consulta un catálogo de archivos y se conservan los identificadores originales.
+
+`compose.yaml` separa la ingesta, que escribe en `data/`, del visor, que monta esa carpeta en solo lectura. Los datos, archivos descargados, secretos y dependencias locales se excluyen de Git y del contexto de construcción de Docker.
+
+## Medición y procedencia
+
+- Las adquisiciones de una misma serie se separan antes de ordenar sus cortes.
+- La posición y orientación DICOM determinan el orden espacial; el nombre del archivo no determina la posición.
+- El volumen requiere espaciado uniforme y referencias SEG compatibles con la adquisición seleccionada.
+- Cada resultado identifica caso, adquisición, etiqueta, conteo de vóxeles y geometría.
+- Una máscara PRE no se utiliza para inferir el volumen POST ni una respuesta al tratamiento.
+- Los estados de referencias ausentes, geometría incompatible y comparación pendiente se presentan explícitamente.
+
+## Interfaz y pruebas
+
+La selección de fuente pertenece a cada visor. Los cambios de caso, serie, adquisición o segmento invalidan las mediciones anteriores. La sincronización de desplazamiento relaciona posiciones relativas; no establece registro anatómico. Los detalles están en la [guía de interfaz](interface-design.md).
+
+Las pruebas de `tests/` verifican reglas geométricas, el caso público HCC_002 y los controles reales del navegador. Los resultados, imágenes y reportes producidos al ejecutarlas son archivos locales regenerables y no se versionan. Los comandos están en la [guía de ejecución](../README.md).

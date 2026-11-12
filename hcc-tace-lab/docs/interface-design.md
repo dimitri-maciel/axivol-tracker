@@ -4,8 +4,6 @@ The workspace supports reviewing baseline and follow-up CT, inspecting the publi
 
 The interface uses English, sentence case and established imaging terms: **Baseline**, **Follow-up**, **Series**, **Acquisition**, **Segmentation**, **Window**, **Level** and **Export report**. Original DICOM descriptions and segment labels remain unchanged. The heading no longer repeats the diagnosis.
 
-Design inputs: the local Sites workflow and the [frontend-design skill](https://github.com/anthropics/skills/tree/main/skills/frontend-design), applied to the existing HTML/CSS/JavaScript application.
-
 ## Visual system
 
 - Canvas #111418; surface #1a1f25; raised controls #222931; text #f0f3f7; accent #a7c9ff; pending state #edca88. The existing segmentation overlay remains cyan #32d5de.
@@ -53,5 +51,7 @@ Browser checks require Playwright and Chromium outside the application image:
     node tests/ui_review.cjs
 
 Use AXIVOL_URL to override http://127.0.0.1:8770, AXIVOL_QA_DIR for artifacts and AXIVOL_AXE_PATH for an installed axe-core script.
+
+Screenshots and JSON reports are generated locally in `output/ui/` by default. They are excluded from version control; the executable checks remain in `tests/`.
 
 The browser check exercises HCC_002 baseline acquisition 1, segment 2 (Mass), both real CT viewports, source changes between its two referenced acquisitions, overlay pixels, linked and independent scrolling, burst navigation, zoom/pan, numeric validation, missing segmentation, JSON/PNG exports, failure states and 1600/1280/1024/390/320 px layouts. Automated checks supplement visual inspection; they do not establish clinical usability.

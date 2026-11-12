@@ -1,34 +1,12 @@
 # Axivol Tracker
 
-Seguimiento volumétrico del carcinoma hepatocelular en tomografía, antes y después de la quimioembolización transarterial (TACE).
+Aplicación local para explorar tomografías de carcinoma hepatocelular antes y después de TACE, revisar las segmentaciones publicadas y medir su volumen en la geometría original.
 
-Proyecto de titulación de **Dimitri Maciel**, Maestría en Ciencias Computacionales, Universidad Autónoma de Guadalajara.
+La interfaz está en inglés. Incluye dos visores, selección de serie y adquisición, ventana y nivel, zoom, navegación por cortes y exportación de reportes. El registro entre estudios, las máscaras POST y la comparación longitudinal están pendientes. El volumen de una máscara no determina viabilidad ni respuesta al tratamiento.
 
-## Material del proyecto
+## Iniciar
 
-- [Póster científico R12: PDF horizontal de 120 × 90 cm](output/pdf/Poster_Tesis_Dimitri_Maciel_Horizontal_r12.pdf).
-- [Vista previa del póster](output/pdf/Vista_previa_poster_horizontal_r12.png).
-- [Guion de presentación de cinco minutos](docs/Guion_presentacion_5_minutos.txt).
-- [Instalación, descarga de datos y pruebas](hcc-tace-lab/README.md).
-- [Arquitectura y decisiones de interfaz](hcc-tace-lab/docs/decisiones.md).
-- [Diseño del visor, accesibilidad y navegación](hcc-tace-lab/docs/interface-design.md).
-- [Reporte técnico del caso HCC_002](output/avance_tecnico/reporte_HCC_002.json).
-
-## Estado actual
-
-La interfaz en inglés permite revisar los estudios Baseline y Follow-up, explorar adquisiciones, ajustar ventana y nivel, ampliar las imágenes y superponer una segmentación DICOM SEG publicada. El volumen se calcula en la geometría original. La navegación prioriza el último corte solicitado y precarga los cortes cercanos. Los datos permanecen en el equipo que ejecuta la aplicación.
-
-![Axivol Tracker: caso HCC_002](output/ui/axivol-desktop.png)
-
-La [verificación de la interfaz](output/ui/README.md) incluye pruebas funcionales, accesibilidad automática y tiempos de navegación.
-
-El conjunto descargado en el entorno de desarrollo contiene 105 casos y 677 series. El ejemplo de volumetría corresponde al caso **HCC_002, adquisición PRE 1, etiqueta Mass (segmento 2)**: 324 430 vóxeles, 109 cortes vinculados y **495,04 cm³**. Es una comprobación técnica de lectura y medición de la máscara publicada.
-
-El registro, la segmentación POST y la comparación longitudinal continúan pendientes. El volumen de la máscara no determina viabilidad ni respuesta al tratamiento. Las pruebas del caso piloto no equivalen a evaluar los 105 casos.
-
-## Ejecutar el caso piloto
-
-Se necesita Docker con Compose y conexión a internet para descargar el caso desde TCIA.
+Requisitos: Docker con Compose y conexión a internet para descargar el caso público desde TCIA.
 
 ```sh
 git clone https://github.com/dimitri-maciel/axivol-tracker.git
@@ -40,27 +18,41 @@ docker compose run --rm ingest fetch --case HCC_002 --workers 3
 docker compose up --build -d app
 ```
 
-Abre [el visor local](http://127.0.0.1:8770/?case=HCC_002). El puerto se publica únicamente en `127.0.0.1`. El servicio de la aplicación monta los datos en solo lectura.
+Abre [Axivol Tracker](http://127.0.0.1:8770/?case=HCC_002). La aplicación se sirve únicamente en el equipo local y lee los datos sin modificarlos.
+
+## Documentación
+
+- [Ejecución, descarga de datos y pruebas](hcc-tace-lab/README.md).
+- [Arquitectura y decisiones técnicas](hcc-tace-lab/docs/decisiones.md).
+- [Interfaz y verificación en navegador](hcc-tace-lab/docs/interface-design.md).
+
+## Estructura
+
+```text
+hcc-tace-lab/
+  hcclab/           Lectura DICOM, geometría, operaciones y servidor
+  web/              Interfaz del visor
+  tests/            Pruebas de geometría, integración y navegador
+  docs/             Documentación técnica
+  compose.yaml      Servicios de aplicación e ingesta
+  Dockerfile        Construcción de las imágenes
+  requirements.txt  Dependencias de Python
+```
+
+Los datos descargados, capturas, reportes generados y materiales de preparación de la exposición permanecen fuera del repositorio. Las pruebas generan sus resultados localmente en `output/`.
+
+## Verificar
+
+Desde `hcc-tace-lab/`, con la aplicación encendida y HCC_002 descargado:
 
 ```sh
-docker compose exec -T app python -m unittest discover -s tests -v
 docker compose exec -T -e HCC_PILOT_TEST=1 app python -m unittest discover -s tests -v
 ```
 
-La segunda orden requiere el caso HCC_002 descargado. Los detalles de la ingesta completa y del anexo clínico están en la [guía de ejecución](hcc-tace-lab/README.md).
+El caso de comprobación es **HCC_002, adquisición PRE 1, etiqueta Mass (segmento 2)**: 324 430 vóxeles y 495,04 cm³. Esta prueba verifica la lectura y medición de una máscara publicada; no evalúa el desempeño clínico ni toda la colección.
 
-## Organización
+## Atribución
 
-- `hcc-tace-lab/`: aplicación, servicios Docker, ingesta TCIA y pruebas.
-- `poster/`: generador del póster vigente, figuras derivadas y procedencia.
-- `output/pdf/`: póster y vistas de revisión de la versión vigente.
-- `output/avance_tecnico/`: reportes de ingesta y medición del caso público.
-- `docs/`: guion para la presentación.
+Datos e imágenes: Moawad et al., *HCC-TACE-Seg*, The Cancer Imaging Archive, 2021. [DOI 10.7937/TCIA.5FNA-0924](https://doi.org/10.7937/TCIA.5FNA-0924), licencia [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
-El repositorio publica una selección de la versión vigente. Los borradores y prototipos anteriores se conservan en el historial local de desarrollo.
-
-## Datos y atribución
-
-Los DICOM, los archivos descargados, el anexo clínico, las dependencias y los secretos no se incluyen en Git. El procedimiento de ingesta permite reconstruir el entorno a partir de la fuente pública.
-
-Imágenes y máscaras: Moawad et al., **HCC-TACE-Seg**, The Cancer Imaging Archive, 2021. [DOI 10.7937/TCIA.5FNA-0924](https://doi.org/10.7937/TCIA.5FNA-0924), licencia [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Las figuras del póster son representaciones derivadas; sus transformaciones se documentan en los archivos de procedencia. La aplicación conserva la licencia MIT de html2canvas en su carpeta web.
+La licencia MIT de html2canvas se conserva junto con la biblioteca en `hcc-tace-lab/web/`.
