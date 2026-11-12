@@ -2,6 +2,9 @@ data/
 annotations/
 *.npz
 *.npy
+*.pt
+*.pth
+*.safetensors
 .git/
 __pycache__/
 *.pyc

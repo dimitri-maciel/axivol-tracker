@@ -5,7 +5,8 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Thread
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+from types import SimpleNamespace
 from zipfile import ZipFile
 from dataclasses import replace
 import json
@@ -16,10 +17,45 @@ import numpy as np
 from hcclab.candidates import CandidateStore, file_sha256, stack_identity
 from hcclab.geometry import GeometryError, Slice, build_stack
 from hcclab.lab import Lab
+from hcclab.post_automatic import AutomaticSegmentationError
 from hcclab.server import handler
 
 
 class CandidateStoreTests(unittest.TestCase):
+    def test_automatic_post_rechecks_baseline_ct_and_seg_bytes(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_paths = [root / name for name in ('pre-a', 'pre-b', 'post-a', 'post-b', 'seg')]
+            for path in source_paths:
+                path.write_bytes(('synthetic ' + path.name).encode())
+            def make_stack(paths, prefix):
+                first = Slice(paths[0], prefix + '.1', '1', prefix + '.9', (2, 2), (1, 1),
+                              (1, 0, 0, 0, 1, 0), (0, 0, 0))
+                return build_stack([first, replace(first, path=paths[1], sop=prefix + '.2', position=(0, 0, 1))])
+            pre, post = make_stack(source_paths[:2], '1.2'), make_stack(source_paths[2:4], '1.3')
+            def source(stack):
+                return {'stack_identity': stack_identity(stack),
+                        'slices': [{'sha256': file_sha256(s.path)} for s in stack.slices]}
+            lab = Lab(root, root / 'annotations')
+            lab.stack = Mock(side_effect=lambda uid, index: ({}, pre if uid == '1.2' else post))
+            lab.pre_stack = Mock(return_value=({}, pre))
+            lab.post_stack = Mock(return_value=({}, post))
+            metadata = {'status': 'unreviewed', 'stage': 'POST', 'case_id': 'SYNTHETIC',
+                        'series_uid': '1.3', 'stack_index': 0, 'shape_zyx': [2, 2, 2], 'voxels': 8,
+                        'source': source(post), 'baseline_source': {
+                            'series_uid': '1.2', 'stack_index': 0, 'source': source(pre),
+                            'source_seg_sop_uid': '1.4', 'source_seg_sha256': file_sha256(source_paths[4])}}
+            candidate = lab.candidates.save(np.ones((2, 2, 2), dtype=bool), metadata)
+            with patch('hcclab.lab.find_seg', return_value=(source_paths[4], SimpleNamespace(SOPInstanceUID='1.4'))):
+                lab.candidate_for_stack(candidate['id'], '1.3', 0)
+                for path in (source_paths[0], source_paths[4]):
+                    original = path.read_bytes()
+                    path.write_bytes(b'changed source')
+                    with self.subTest(path=path.name), self.assertRaises(GeometryError):
+                        lab.candidate_for_stack(candidate['id'], '1.3', 0)
+                    path.write_bytes(original)
+                    lab.candidate_for_stack(candidate['id'], '1.3', 0)
+
     def test_pre_versions_are_filtered_before_the_recent_limit(self):
         with TemporaryDirectory() as directory:
             store = CandidateStore(Path(directory))
@@ -100,6 +136,7 @@ class CandidateHTTPTests(unittest.TestCase):
         cls.lab.create_candidate.return_value = {'id': 'a' * 32, 'status': 'unreviewed'}
         cls.lab.create_pre_edit.return_value = {'id': 'b' * 32, 'status': 'unreviewed', 'stage': 'PRE'}
         cls.lab.create_pre_refinement.return_value = {'id': 'c' * 32, 'status': 'unreviewed', 'stage': 'PRE'}
+        cls.lab.create_automatic_post_candidate.return_value = {'id': 'd' * 32, 'status': 'unreviewed', 'stage': 'POST'}
         cls.server = ThreadingHTTPServer(('127.0.0.1', 0), handler(cls.lab))
         cls.thread = Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -114,6 +151,7 @@ class CandidateHTTPTests(unittest.TestCase):
         self.lab.create_candidate.reset_mock()
         self.lab.create_pre_edit.reset_mock()
         self.lab.create_pre_refinement.reset_mock()
+        self.lab.create_automatic_post_candidate.reset_mock()
         connection = HTTPConnection('127.0.0.1', self.server.server_port, timeout=5)
         connection.request('POST', path, body, headers)
         response = connection.getresponse()
@@ -177,3 +215,32 @@ class CandidateHTTPTests(unittest.TestCase):
                 status, _ = self.request(dict(headers, **extra), body, '/api/pre-refinements')
                 self.assertEqual(status, expected)
                 self.lab.create_pre_refinement.assert_not_called()
+
+    def test_automatic_post_uses_separate_bounded_same_origin_operation(self):
+        headers = {'Content-Type': 'application/json'}
+        payload = {'case_id': 'SYNTHETIC', 'pre_series_uid': '1.2.3', 'segment': 2}
+        status, document = self.request(headers, json.dumps(payload).encode(), '/api/automatic-post-candidates')
+        self.assertEqual((status, document['stage']), (201, 'POST'))
+        self.lab.create_automatic_post_candidate.assert_called_once_with(payload)
+        self.lab.create_candidate.assert_not_called()
+        for extra, body, expected in [({'Origin': 'https://outside.example'}, b'{}', 403),
+                                      ({'Host': 'outside.example'}, b'{}', 403),
+                                      ({'Content-Type': 'text/plain'}, b'{}', 415),
+                                      ({}, b' ' * 8193, 413)]:
+            with self.subTest(extra=extra, expected=expected):
+                status, _ = self.request(dict(headers, **extra), body, '/api/automatic-post-candidates')
+                self.assertEqual(status, expected)
+                self.lab.create_automatic_post_candidate.assert_not_called()
+
+    def test_automatic_abstention_returns_diagnostics_without_a_candidate(self):
+        diagnostics = {'registration': {'status': 'estimated_unverified'},
+                       'segmentation': {'status': 'abstained', 'reason': 'synthetic_leakage'}}
+        self.lab.create_automatic_post_candidate.side_effect = AutomaticSegmentationError('Region not separable.', diagnostics)
+        try:
+            status, document = self.request({'Content-Type': 'application/json'}, b'{}', '/api/automatic-post-candidates')
+        finally:
+            self.lab.create_automatic_post_candidate.side_effect = None
+        self.assertEqual(status, 422)
+        self.assertEqual(document, {'status': 'abstained', 'error': 'Region not separable.', 'diagnostics': diagnostics})
+        self.assertNotIn('id', document)
+        self.assertNotIn('volume_cm3', document)

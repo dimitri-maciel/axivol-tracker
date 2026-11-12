@@ -8,6 +8,7 @@ export HCC_UID=$(id -u) HCC_GID=$(id -g)
 docker compose run --build --rm ingest catalog
 docker compose run --rm ingest fetch --case HCC_002 --workers 3
 docker compose run --rm ingest clinical
+docker compose run --rm --entrypoint python ingest -m hcclab.model_assets fetch
 docker compose up --build -d app
 ```
 
@@ -31,7 +32,17 @@ El selector **Mask version** permite alternar **Original (published)** y **Refin
 
 Guarda o limpia los trazos manuales antes de refinar. El refinamiento y las nuevas sesiones de pincel parten del original; esta versión todavía no encadena correcciones manuales sobre la candidata refinada. Consulta la [explicación completa del algoritmo, sus límites y la evaluación pendiente](docs/automatic-refinement.md).
 
-## Generar una máscara POST candidata
+## Generar una máscara POST automáticamente
+
+Actualiza el contenedor con `docker compose up --build -d app`. Selecciona las adquisiciones PRE y POST en **Study details**, y el segmento publicado `Mass` en **Segmentation**. Abre **Follow-up mask**, comprueba la referencia **Baseline reference** y pulsa **Generate automatically**. El proceso usa el original publicado incluso si el visor PRE muestra una copia editada o refinada.
+
+Si ya tenías la aplicación instalada, descarga primero el modelo con `docker compose run --build --rm --entrypoint python ingest -m hcclab.model_assets fetch`. El checkpoint fijado ocupa unos 72 MB y se verifica antes de utilizarse. Queda en `data/models`, fuera de Git y del contexto de construcción. La inferencia utiliza Efficient MedSAM2 tiny, corre localmente en CPU y en el piloto HCC_002 tarda alrededor de 50 segundos; se puede seguir navegando por los visores durante la generación.
+
+El registro estima dónde buscar la región correspondiente. La delimitación se calcula después con los HU y vecinos de la TC POST, conservando su retícula original. La app muestra la candidata en el visor POST y permite recorrer los cortes, ocultar la superposición y exportar máscara y procedencia. Si no supera un control de localización o delimitación, presenta el motivo y no guarda una máscara sustitutiva. Cambiar de fuente durante el cálculo evita aplicar el resultado a otra adquisición.
+
+**Automatic candidate · Unreviewed** significa propuesta para revisar. El registro calculado tampoco está verificado anatómicamente. No se interpreta como tumor viable ni se habilita un porcentaje de respuesta. Consulta la [guía completa de generación automática POST](docs/automatic-post-segmentation.md): geometría, ecuaciones, parámetros, límites, fuentes, código y evaluación pendiente.
+
+## Generar una máscara POST con región y semilla
 
 Actualiza el contenedor con `docker compose up --build -d app`. Debajo de los visores encontrarás **Follow-up mask**:
 

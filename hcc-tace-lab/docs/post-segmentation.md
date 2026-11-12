@@ -1,5 +1,7 @@
 # Máscaras POST: guía del primer algoritmo de Axivol
 
+Esta página documenta el método asistido con región, semilla y límites HU. El flujo posterior de localización y generación automática se explica en la [guía automática POST](automatic-post-segmentation.md).
+
 Esta guía explica cómo obtener una **máscara candidata en la tomografía posterior a TACE**, cómo se calcula y qué falta para evaluarla científicamente. La salida se identifica como **Candidate · Unreviewed**: una región propuesta por el algoritmo, todavía sin revisión experta. No es una referencia clínica ni una medida de respuesta al tratamiento.
 
 El método es semiautomático: una persona elige una región, una semilla y un intervalo de intensidades; el programa conserva los vóxeles conectados que cumplen esas condiciones. **No utiliza una red neuronal entrenada ni traslada la máscara PRE a POST.**

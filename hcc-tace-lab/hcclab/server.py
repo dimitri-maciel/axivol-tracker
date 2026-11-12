@@ -10,6 +10,7 @@ from pydicom.errors import InvalidDicomError
 
 from .geometry import GeometryError
 from .lab import Lab
+from .post_automatic import AutomaticSegmentationError
 
 STATIC = {
     '/':('index.html','text/html; charset=utf-8'),
@@ -84,7 +85,8 @@ def handler(lab: Lab):
                         or self.headers.get('Sec-Fetch-Site') == 'cross-site'):
                     return self.json(403, {'error': 'Use the local app to create a candidate.'})
                 operations = {'/api/candidates': lab.create_candidate, '/api/pre-edits': lab.create_pre_edit,
-                              '/api/pre-refinements': lab.create_pre_refinement}
+                              '/api/pre-refinements': lab.create_pre_refinement,
+                              '/api/automatic-post-candidates': lab.create_automatic_post_candidate}
                 if self.path not in operations:
                     return self.json(404, {'error': 'Route not found.'})
                 if self.headers.get_content_type() != 'application/json':
@@ -101,6 +103,8 @@ def handler(lab: Lab):
                 pass
             except KeyError as error:
                 self.json(404, {'error': str(error).strip("'")})
+            except AutomaticSegmentationError as error:
+                self.json(422, {'status': 'abstained', 'error': str(error), 'diagnostics': error.diagnostics})
             except (GeometryError, ValueError, UnicodeError) as error:
                 self.json(422, {'error': str(error)})
             except (AttributeError, OSError, RuntimeError, InvalidDicomError) as error:

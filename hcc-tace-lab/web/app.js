@@ -16,11 +16,19 @@ const number = new Intl.NumberFormat('en-US', {maximumFractionDigits: 2});
 const integer = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
 const editor = createSegmentationEditor({
   ready: () => !!state.views.post?.ready,
+  baselineSource,
   displayedIndex: () => state.views.post?.displayedIndex,
   transform: () => state.display.post,
   resetZoom: () => setZoom('post', 1),
   updateTransform: () => updateTransform('post'),
   changed: () => reportLink(),
+  focusSlice(index) {
+    const stack = selection('post');
+    if (Number.isInteger(index) && stack && index >= 0 && index < stack.slices) $('post-index').value = index + 1;
+    $('post-image').hidden = true;
+    $('post-overlay-label').hidden = true;
+    showSlice('post');
+  },
   refreshImage() {
     // Do not leave pixels from a previous candidate visible during an overlay change.
     $('post-image').hidden = true;
@@ -70,10 +78,21 @@ function selectedSegment() {
   return state.views.pre?.summary.segments.find(s => String(s.number) === $('segment').value);
 }
 
+function baselineSource() {
+  const view = state.views.pre, stack = selection('pre'), segment = selectedSegment();
+  if (!state.case || !view || !stack || !segment) return null;
+  // Automatic POST localization always uses the published SEG, regardless of
+  // which edited/refined PRE copy is currently displayed in the viewport.
+  return {case_id: state.case.id, series_uid: view.uid, stack_index: stack.index,
+    acquisition: stack.acquisition, source_segment: segment.number, source_segment_label: segment.label,
+    description: view.summary.description, interval_mm: stack.interval_mm, issue: stack.issue, ready: view.ready};
+}
+
 function updatePreEditorSource() {
   const stack = selection('pre'), segment = selectedSegment();
   preEditor.setSource(stack && segment ? {...stack, case_id: state.case.id,
     series_uid: state.views.pre.uid, stack_index: stack.index, segment: segment.number, label: segment.label} : null);
+  editor.baselineChanged();
 }
 
 function reportLink() {
@@ -171,6 +190,10 @@ async function showSlice(stage) {
     query.set('mask_style', preEditor.presentation.style);
     query.set('mask_opacity', preEditor.presentation.opacity);
   }
+  if (stage === 'post' && candidateId && editor.automatic) {
+    query.set('mask_style', 'combined');
+    query.set('mask_opacity', '15');
+  }
   element(stage, 'index').setAttribute('aria-valuetext', 'Requested slice ' + (index + 1) + ' of ' + stack.slices);
   element(stage, 'prev').disabled = index === 0;
   element(stage, 'next').disabled = index + 1 >= stack.slices;
@@ -260,7 +283,7 @@ async function loadSeries(stage, epoch) {
   const serial = ++state.requested[stage];
   ++state.imageRequest[stage];
   delete state.views[stage];
-  if (stage === 'pre') preEditor.setSource(null);
+  if (stage === 'pre') { preEditor.setSource(null); editor.baselineChanged(); }
   if (stage === 'post') editor.setSource(null);
   setStudyControls(stage, true);
   element(stage, 'image').hidden = true;
@@ -312,6 +335,7 @@ async function loadCase(id) {
   frames.clear();
   state.views = {};
   state.case = null;
+  editor.baselineChanged();
   preEditor.setSource(null);
   editor.setSource(null);
   resetMeasurement();

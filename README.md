@@ -2,7 +2,7 @@
 
 Aplicación local para explorar tomografías de carcinoma hepatocelular antes y después de TACE, revisar las segmentaciones publicadas y medir su volumen en la geometría original.
 
-La interfaz está en inglés. Incluye dos visores, selección de serie y adquisición, ventana y nivel, zoom, navegación por cortes y exportación de reportes. La máscara PRE permite ajustar contorno y transparencia, corregir una copia con pincel y generar un refinamiento automático local del borde conservando el original. El editor **Follow-up mask** genera candidatos POST mediante una región, una semilla y límites HU, con revisión visual y exportación de la máscara y su procedencia. El registro entre estudios, las referencias POST expertas y la comparación longitudinal siguen pendientes. El volumen de un candidato no determina viabilidad ni respuesta al tratamiento.
+La interfaz está en inglés. Incluye dos visores, selección de serie y adquisición, ventana y nivel, zoom, navegación por cortes y exportación de reportes. La máscara PRE permite ajustar contorno y transparencia, corregir una copia con pincel y generar un refinamiento automático local del borde conservando el original. **Follow-up mask** permite generar una candidata POST automáticamente: estima un registro rígido, utiliza `Mass` PRE para localizar una región y delimita sobre los píxeles POST. También conserva el método asistido con región, semilla y límites HU. Las candidatas y el registro requieren revisión; las referencias POST expertas y la comparación longitudinal siguen pendientes. El volumen de un candidato no determina viabilidad ni respuesta al tratamiento.
 
 ## Iniciar
 
@@ -15,6 +15,7 @@ mkdir -p data
 export HCC_UID=$(id -u) HCC_GID=$(id -g)
 docker compose run --build --rm ingest catalog
 docker compose run --rm ingest fetch --case HCC_002 --workers 3
+docker compose run --rm --entrypoint python ingest -m hcclab.model_assets fetch
 docker compose up --build -d app
 ```
 
@@ -22,12 +23,15 @@ Abre [Axivol Tracker](http://127.0.0.1:8770/?case=HCC_002). La aplicación se si
 
 ## Documentación
 
+La generación POST usa Efficient MedSAM2 tiny en CPU. Los pesos se descargan a `data/models`, se verifican con SHA-256 y permanecen fuera de Git y de la imagen de aplicación. En el piloto HCC_002, la inferencia completa tarda aproximadamente 50 segundos. En **Follow-up mask**, pulsa **Generate automatically** y revisa después el resultado **Unreviewed**. El código upstream tiene licencia Apache-2.0; los pesos publicados especifican uso de investigación/educación y CC-BY-SA-4.0. Véanse las [fuentes y límites del modelo](hcc-tace-lab/docs/automatic-post-segmentation.md).
+
 - [Ejecución, descarga de datos y pruebas](hcc-tace-lab/README.md).
 - [Arquitectura y decisiones técnicas](hcc-tace-lab/docs/decisiones.md).
 - [Interfaz y verificación en navegador](hcc-tace-lab/docs/interface-design.md).
 - [Revisión y edición de una copia PRE](hcc-tace-lab/docs/pre-mask-review.md).
 - [Refinamiento automático PRE: método, matemáticas y evaluación](hcc-tace-lab/docs/automatic-refinement.md).
 - [Generación de candidatos POST: uso, método y evaluación](hcc-tace-lab/docs/post-segmentation.md).
+- [Localización y segmentación automática POST: funcionamiento y límites](hcc-tace-lab/docs/automatic-post-segmentation.md).
 - [Matemáticas de la segmentación, geometría y métricas](hcc-tace-lab/docs/post-segmentation-math.md).
 
 ## Estructura

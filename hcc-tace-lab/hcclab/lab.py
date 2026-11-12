@@ -16,6 +16,8 @@ from .geometry import GeometryError, native_volume_cm3
 from .segmentation import grow_region
 from .mask_editing import apply_strokes
 from .refinement import refine_boundary
+from .post_automatic import AutomaticSegmentationError, automatic_post_candidate
+from .model_assets import model_path
 from .volume import load_hu_volume
 from .tcia import COLLECTION, DOI
 
@@ -285,6 +287,18 @@ class Lab:
                 raise GeometryError('The published source segmentation has changed.')
             stat = seg[0].stat()
             version += ((stat.st_size, stat.st_mtime_ns, stat.st_ino),)
+        if document.get('baseline_source'):
+            # An automatic POST candidate depends on both CT acquisitions and
+            # the published PRE SEG used to locate its search region.
+            baseline = document['baseline_source']
+            pre_row, pre_stack = self.pre_stack(document['case_id'], baseline['series_uid'], baseline['stack_index'])
+            pre_seg = find_seg(self.catalog, pre_row)
+            if (pre_seg is None or stack_identity(pre_stack) != baseline['source']['stack_identity']
+                    or str(pre_seg[1].SOPInstanceUID) != baseline['source_seg_sop_uid']):
+                raise GeometryError('The baseline localization source has changed.')
+            for path in [*(s.path for s in pre_stack.slices), pre_seg[0]]:
+                stat = path.stat()
+                version += ((stat.st_size, stat.st_mtime_ns, stat.st_ino),)
         self.verify_candidate_sources(candidate_id, version)
         return document
 
@@ -299,6 +313,14 @@ class Lab:
             seg = find_seg(self.catalog, row)
             if seg is None or file_sha256(seg[0]) != document['source_seg_sha256']:
                 raise GeometryError('The published source segmentation differs from the edited copy source.')
+        if document.get('baseline_source'):
+            baseline = document['baseline_source']
+            pre_row, pre_stack = self.stack(baseline['series_uid'], baseline['stack_index'])
+            pre_seg = find_seg(self.catalog, pre_row)
+            if (pre_seg is None or file_sha256(pre_seg[0]) != baseline['source_seg_sha256']
+                    or tuple(file_sha256(s.path) for s in pre_stack.slices)
+                    != tuple(s['sha256'] for s in baseline['source']['slices'])):
+                raise GeometryError('Baseline files differ from those used for automatic localization. Generate a new candidate.')
 
     def voxel(self, uid, stack_index, z, y, x):
         """Expose one calibrated intensity to help choose explicit HU limits."""
@@ -318,6 +340,128 @@ class Lab:
     def list_candidates(self, case_id, uid, stack_index):
         self.post_stack(case_id, uid, stack_index)
         return {'candidates': self.candidates.list(case_id, uid, stack_index)}
+
+    def create_automatic_post_candidate(self, payload):
+        """Localize from published PRE, then segment native POST intensities.
+
+        Both acquisitions and the original SEG are hashed before and after the
+        operation. A failure saves nothing. Registration is an estimate, not an
+        approval of contrast phase, anatomical correspondence or the new mask.
+        """
+        required = {'case_id', 'series_uid', 'stack_index', 'pre_series_uid', 'pre_stack_index', 'segment'}
+        if not isinstance(payload, dict) or set(payload) != required:
+            raise ValueError('Provide case_id, series_uid, stack_index, pre_series_uid, pre_stack_index and segment.')
+        if (any(not isinstance(payload[k], str) for k in ('case_id', 'series_uid', 'pre_series_uid'))
+                or type(payload['segment']) is not int or payload['segment'] < 1):
+            raise ValueError('Invalid source identifiers or segment number.')
+        case_id, uid, index = (payload[k] for k in ('case_id', 'series_uid', 'stack_index'))
+        row, stack = self.post_stack(case_id, uid, index)
+        pre_uid, pre_index, segment = (payload[k] for k in ('pre_series_uid', 'pre_stack_index', 'segment'))
+        pre_row, pre_stack = self.pre_stack(case_id, pre_uid, pre_index)
+        if any(s.interval_mm is None or s.issue for s in (pre_stack, stack)):
+            raise GeometryError('Both acquisitions need uniform geometry for automatic localization.')
+        seg = find_seg(self.catalog, pre_row)
+        if seg is None:
+            raise GeometryError('Automatic localization needs a published baseline Mass segment.')
+        label = next((item['label'] for item in segment_options(seg[1]) if item['number'] == segment), None)
+        if label is None or label.strip().casefold() != 'mass':
+            raise GeometryError('Select the published baseline Mass segment for automatic localization.')
+        if not self.segmentation_lock.acquire(blocking=False):
+            raise ValueError('A mask operation is running. Wait for it to finish.')
+        started = time.perf_counter()
+        try:
+            pre_hashes = tuple(file_sha256(s.path) for s in pre_stack.slices)
+            post_hashes = tuple(file_sha256(s.path) for s in stack.slices)
+            seg_hash = file_sha256(seg[0])
+            seg = verify_pre_sources(pre_stack, seg, expected_series_uid=pre_uid,
+                                     expected_study_uid=pre_row['StudyInstanceUID'])
+            original = referenced_mask(*seg, segment, pre_stack)
+            pre_hu, pre_valid = self.hu_volume(pre_uid, pre_index, pre_hashes)
+            post_hu, post_valid = self.hu_volume(uid, index, post_hashes)
+            try:
+                mask, diagnostics = automatic_post_candidate(pre_hu, post_hu, original, pre_stack, stack,
+                                                            pre_valid=pre_valid, post_valid=post_valid,
+                                                            model_path=model_path(self.catalog.data))
+            except AutomaticSegmentationError as error:
+                # A failed run is useful evidence too, but it is not a mask.
+                # Let the browser export its inputs and reason without storing
+                # a candidate, a volume, or a fallback segmentation.
+                if (seg_hash != file_sha256(seg[0])
+                        or pre_hashes != tuple(file_sha256(s.path) for s in pre_stack.slices)
+                        or post_hashes != tuple(file_sha256(s.path) for s in stack.slices)):
+                    raise GeometryError('Source files changed during automatic segmentation. Reload the acquisitions.') from error
+                error.diagnostics['sources'] = {
+                    'case_id': case_id, 'created_utc': datetime.now(timezone.utc).isoformat(),
+                    'pre': {'series_uid': pre_uid, 'stack_index': pre_index,
+                            'acquisition': pre_stack.slices[0].acquisition,
+                            'source_segment': segment, 'source_segment_label': label,
+                            'source_seg_sha256': seg_hash, 'ct_sha256': list(pre_hashes),
+                            'stack_identity': stack_identity(pre_stack)},
+                    'post': {'series_uid': uid, 'stack_index': index, 'acquisition': stack.slices[0].acquisition,
+                             'ct_sha256': list(post_hashes), 'stack_identity': stack_identity(stack)},
+                    'software': {name: importlib.metadata.version(name) for name in
+                                 ('numpy', 'scipy', 'pydicom', 'SimpleITK', 'torch', 'torchvision', 'MedSAM2', 'hydra-core')},
+                    'implementation_sha256': {name: file_sha256(Path(__file__).with_name(name))
+                                              for name in ('registration.py', 'post_automatic.py', 'post_model.py', 'model_assets.py', 'volume.py')},
+                    'elapsed_seconds': round(time.perf_counter() - started, 4),
+                }
+                raise
+            if (seg_hash != file_sha256(seg[0])
+                    or pre_hashes != tuple(file_sha256(s.path) for s in pre_stack.slices)
+                    or post_hashes != tuple(file_sha256(s.path) for s in stack.slices)):
+                raise GeometryError('Source files changed during automatic segmentation. Reload the acquisitions.')
+            if mask.dtype != np.bool_ or mask.shape != post_hu.shape or not mask.any() or np.any(mask & ~post_valid):
+                raise GeometryError('Automatic segmentation did not produce a valid native POST candidate.')
+            count = int(np.count_nonzero(mask))
+            result = diagnostics.get('segmentation', {})
+            display_index = result.get('display_slice_index')
+            if (result.get('voxels') != count or type(display_index) is not int
+                    or not 0 <= display_index < len(mask) or not mask[display_index].any()):
+                raise GeometryError('The candidate diagnostics do not match the generated POST mask.')
+            first = stack.slices[0]
+            pre_payload = {'case_id': case_id, 'series_uid': pre_uid, 'stack_index': pre_index, 'segment': segment}
+            pre_record = self._pre_provenance(pre_payload, pre_row, pre_stack, seg, pre_hashes, seg_hash)
+            baseline = {key: pre_record[key] for key in ('series_uid', 'stack_index', 'acquisition',
+                        'source_segment', 'source_segment_label', 'source_seg_sop_uid', 'source_seg_sha256', 'source')}
+            voxels = count
+            metadata = {
+                'schema_version': 1, 'status': 'unreviewed', 'stage': 'POST',
+                'created_utc': datetime.now(timezone.utc).isoformat(),
+                'case_id': case_id, 'series_uid': uid, 'stack_index': index,
+                'acquisition': first.acquisition, 'label': 'Automatic candidate',
+                'target': 'Estimated treated-lesion region; anatomical extent unverified',
+                'parameters': {'pre_series_uid': pre_uid, 'pre_stack_index': pre_index, 'segment': segment},
+                'baseline_source': baseline, 'shape_zyx': list(mask.shape), 'voxels': voxels,
+                'volume_cm3': native_volume_cm3(voxels, first.spacing, stack.interval_mm),
+                'diagnostics': diagnostics,
+                'method': {'name': 'registered_post_segmentation', 'version': '1.0.0',
+                           'native_output_grid': True, 'registration_working_grid_resampled': True,
+                           'model_input_shape_yx': [512, 512],
+                           'model_input_resized': tuple(post_hu.shape[1:]) != (512, 512),
+                           'uses_pre_mask': 'localization_only', 'mask_intensities': 'native_POST_HU',
+                           'padding_excluded': True,
+                           'implementation_sha256': {name: file_sha256(Path(__file__).with_name(name))
+                                                     for name in ('registration.py', 'post_automatic.py', 'post_model.py', 'model_assets.py', 'volume.py')}},
+                'source': {'collection': COLLECTION, 'dataset_doi': DOI,
+                           'study_uid': row['StudyInstanceUID'], 'frame_of_reference_uid': first.frame,
+                           'stack_identity': stack_identity(stack), 'axis_order': 'z,y,x',
+                           'row_column_spacing_mm': first.spacing, 'slice_interval_mm': stack.interval_mm,
+                           'orientation_patient': first.orientation, 'intensity_units': 'HU',
+                           'intensity_rule': 'Per-slice rescale slope/intercept; explicit HU or classic ORIGINAL CT conditional HU rule; padding excluded.',
+                           'slices': [{'index': i, 'sop_uid': s.sop, 'position_patient_mm': s.position,
+                                       'sha256': post_hashes[i]} for i, s in enumerate(stack.slices)]},
+                'software': {name: importlib.metadata.version(name) for name in
+                             ('numpy', 'scipy', 'pydicom', 'SimpleITK', 'torch', 'torchvision', 'MedSAM2', 'hydra-core')},
+                'elapsed_seconds': round(time.perf_counter() - started, 4),
+                'warnings': ['Automatic candidate. Review the boundary on every included slice.',
+                             'Registration, contrast phase and lesion correspondence remain unverified.',
+                             'This region does not identify viable tumor or establish treatment response.',
+                             *diagnostics['segmentation'].get('warnings', [])],
+                'scope': 'Unreviewed segmentation from native POST pixels. PRE supplies localization only; no clinical volume comparison.',
+            }
+            return self.candidates.save(mask, metadata)
+        finally:
+            self.segmentation_lock.release()
 
     def create_candidate(self, payload):
         required = {'case_id', 'series_uid', 'stack_index', 'seed', 'roi', 'lower_hu', 'upper_hu'}
@@ -405,6 +549,10 @@ class Lab:
             except GeometryError as error:
                 issue = str(error)
         candidate = self.candidate_for_stack(candidate_id, post_uid, post_stack) if candidate_id else None
+        if candidate and candidate.get('baseline_source'):
+            baseline = candidate['baseline_source']
+            if (baseline['series_uid'], baseline['stack_index'], baseline['source_segment']) != (pre_uid, pre_stack, segment):
+                raise GeometryError('The automatic follow-up candidate uses a different baseline reference.')
         pre_candidate = self.candidate_for_stack(pre_candidate_id, pre_uid, pre_stack) if pre_candidate_id else None
         if pre_candidate and pre_candidate['source_segment'] != segment:
             raise GeometryError('The edited copy belongs to a different baseline segment.')

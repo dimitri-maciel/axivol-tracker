@@ -73,7 +73,7 @@
               <span class="frame-message" id="post-image-state" role="status">Loading image…</span>
               <span class="marker a"></span><span class="marker p"></span><span class="marker r"></span><span class="marker l"></span>
               <span class="view-label">CT</span>
-              <span id="post-overlay-label" class="overlay-label candidate-overlay-label" hidden><i></i>Candidate · Unreviewed</span>
+              <span id="post-overlay-label" class="overlay-label candidate-overlay-label" hidden><i></i><span>Candidate · Unreviewed</span></span>
             </div>
             <div class="viewport-tools">
               <span id="post-meta" class="acquisition-meta"></span>
@@ -89,6 +89,19 @@
         <div class="viewer-help"><span>Click an image to scroll with the mouse or ↑ ↓.</span><span>Drag to pan when zoomed.</span></div>
         <section id="candidate-editor" class="candidate-editor" aria-labelledby="candidate-title">
           <div class="candidate-heading"><h2 id="candidate-title">Follow-up mask</h2><span id="candidate-status" class="status-tag">No candidate</span></div>
+          <div class="automatic-post"><div><p class="field-label">Baseline reference</p><p id="candidate-baseline" class="automatic-reference">Select a published Mass segmentation.</p><details class="automatic-source"><summary>Reference details</summary><dl class="source-details"><dt>Series</dt><dd id="candidate-baseline-series">—</dd><dt>Series UID</dt><dd id="candidate-baseline-uid">—</dd></dl></details></div><div class="automatic-action"><button id="candidate-automatic" class="button primary" disabled>Generate automatically</button><p id="candidate-automatic-note" class="field-hint">Uses the published baseline mask to locate the target. Segments follow-up CT.</p></div></div>
+          <div id="candidate-attempt" class="automatic-attempt" hidden>
+            <div class="section-heading"><h3 id="candidate-attempt-title">Automatic segmentation needs review</h3><span class="status-tag">No new candidate</span></div>
+            <p class="field-hint">No automatic mask was created. Use manual selection.</p>
+            <details class="automatic-source"><summary>Run details</summary><dl class="source-details">
+              <dt>Reason</dt><dd id="candidate-attempt-reason"></dd>
+              <dt>Published baseline reference</dt><dd id="candidate-attempt-baseline"></dd>
+              <dt>Baseline series UID</dt><dd id="candidate-attempt-pre-uid"></dd>
+              <dt>Follow-up acquisition</dt><dd id="candidate-attempt-post"></dd>
+              <dt>Follow-up series UID</dt><dd id="candidate-attempt-post-uid"></dd>
+              <dt>Registration</dt><dd id="candidate-attempt-registration"></dd>
+            </dl><a id="candidate-attempt-export" class="button secondary" download>Export run details</a></details>
+          </div>
           <div class="candidate-grid">
             <div class="candidate-region">
               <p class="field-label">Region and seed</p>
@@ -120,6 +133,7 @@
                 <div class="candidate-volume"><strong id="candidate-volume">—</strong><span>cm³</span></div>
                 <p class="field-hint">Candidate volume · <span id="candidate-voxels">—</span> voxels</p>
                 <p id="candidate-source" class="field-hint"></p>
+                <div id="candidate-automatic-result" hidden><dl class="automatic-diagnostics"><div><dt>Registration</dt><dd>Unverified</dd></div><div><dt>Mask source</dt><dd>Follow-up CT</dd></div></dl><details class="automatic-source"><summary>Generation details</summary><dl class="source-details"><dt>Published baseline reference</dt><dd id="candidate-reference-used">—</dd><dt>Baseline series UID</dt><dd id="candidate-reference-uid">—</dd></dl></details></div>
                 <label class="toggle-control" for="candidate-overlay"><input id="candidate-overlay" type="checkbox" checked><span class="swatch"></span>Show candidate</label>
                 <a id="candidate-export" class="button secondary" download>Download mask</a>
               </div>
@@ -161,7 +175,7 @@
         </section>
         <section class="comparison-section">
           <div class="section-heading"><h2>Comparison</h2><span class="status-tag">Pending</span></div>
-          <dl class="review-status"><div><dt>Contrast phase</dt><dd>Not verified</dd></div><div><dt>Registration</dt><dd>Pending</dd></div><div><dt>Follow-up segmentation</dt><dd id="followup-segmentation-status">Unavailable</dd></div></dl>
+          <dl class="review-status"><div><dt>Contrast phase</dt><dd>Not verified</dd></div><div><dt>Registration</dt><dd id="registration-status">Pending</dd></div><div><dt>Follow-up segmentation</dt><dd id="followup-segmentation-status">Unavailable</dd></div></dl>
           <div class="volume-change"><span>Volume change</span><strong>Not calculated</strong></div>
         </section>
       </aside>

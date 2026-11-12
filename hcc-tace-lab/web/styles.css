@@ -105,6 +105,20 @@ dl { margin: 0; }
 .candidate-editor { margin-top: 24px; padding: 20px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .candidate-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 .candidate-heading h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.automatic-post { display: grid; grid-template-columns: minmax(0,1fr) minmax(220px,1fr); gap: 24px; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+.automatic-reference { color: var(--text); font-size: 13px; }
+.automatic-source summary { padding: 7px 0; font-size: 11px; min-height: 32px; }
+.automatic-source .source-details dd { text-align: left; }
+.automatic-action { max-width: 350px; justify-self: end; }
+.automatic-action .field-hint { margin-top: 8px; }
+.automatic-diagnostics { font-size: 11px; margin-top: 10px; line-height: 1.6; }
+.automatic-diagnostics > div { display: flex; justify-content: space-between; gap: 10px; }
+.automatic-attempt { margin-bottom: 20px; padding: 13px 15px; border-left: 3px solid var(--warning); background: #25241f; }
+.automatic-attempt .section-heading { margin-bottom: 6px; flex-wrap: wrap; }
+.automatic-attempt h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.automatic-attempt .button { margin-top: 12px; }
+.button.is-busy::before { content: ''; width: 13px; height: 13px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: mask-pending .8s linear infinite; }
+@keyframes mask-pending { to { transform: rotate(360deg); } }
 .candidate-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); gap: 22px; }
 .candidate-grid > div { min-width: 0; }
 .candidate-grid > div + div { padding-left: 22px; border-left: 1px solid var(--line); }
@@ -201,6 +215,8 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
   .catalog-status { display: none; }
 }
 @media (max-width:720px) {
+  .automatic-post { grid-template-columns: 1fr; gap: 12px; }
+  .automatic-action { width: 100%; max-width: none; }
   .candidate-editor { padding: 17px; }
   .candidate-grid { grid-template-columns: 1fr; gap: 18px; }
   .candidate-grid > div + div { padding: 18px 0 0; border-left: none; border-top: 1px solid var(--line); }
@@ -218,4 +234,4 @@ dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
   .viewer-help { flex-direction: column; gap: 4px; }
   .app-footer { padding: 22px 16px; flex-direction: column; gap: 9px; }
 }
-@media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior: auto !important; } }
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior: auto !important; }.button.is-busy::before { animation: none; } }

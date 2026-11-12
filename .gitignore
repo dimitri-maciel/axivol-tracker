@@ -7,6 +7,9 @@ node_modules/
 **/annotations/
 *.npz
 *.npy
+*.pt
+*.pth
+*.safetensors
 .env
 .env.*
 !.env.example

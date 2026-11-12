@@ -12,6 +12,8 @@
 | `segmentation.py` | Componente conexa de una semilla dentro de ROI y rango HU, independiente de archivos e interfaz. |
 | `mask_editing.py` | Correcciones manuales sobre una copia binaria, con pincel en milímetros y trazos reproducibles. |
 | `refinement.py` | Ajuste automático PRE en una franja física mediante una energía binaria de intensidad, vecinos y conservación del original. |
+| `registration.py` | Registro rígido en coordenadas físicas y localización de una región POST; no produce una máscara propagada. |
+| `post_automatic.py` | Propuesta automática desde intensidades POST, con controles de separación, fuga y abstención. |
 | `candidates.py` | Persistencia inmutable, integridad y exportación de candidatos con procedencia. |
 | `lab.py` | Operaciones de la aplicación compartidas por servidor y pruebas. |
 | `server.py` | Adaptador HTTP para las operaciones y los archivos estáticos. |
@@ -32,6 +34,8 @@ El primer método POST es crecimiento por umbral con conectividad de seis vecino
 Las ediciones PRE parten del SEG publicado y usan su rejilla de referencias exactas. Se guardan como candidatos `PRE` separados, con hash del SEG y de las imágenes, segmento fuente, trazos y conteos de cambios. El navegador y el servidor usan la misma distancia física al trazo. El contorno mostrado es interior: no expande ni suaviza la máscara. Los detalles están en la [guía de revisión PRE](pre-mask-review.md).
 
 El refinamiento PRE reutiliza las verificaciones de fuente y el almacenamiento de candidatos, con método `boundary_graph_cut`. Se ejecuta sobre HU nativas; fija las etiquetas fuera de la franja y resuelve un corte mínimo con capacidades enteras acotadas. Una máscara sin cambios también se conserva como resultado explícito, con su motivo. Los parámetros y supuestos se documentan en la [guía del refinamiento automático](automatic-refinement.md). El POST permanece independiente.
+
+La ruta automática POST añade SimpleITK para estimar una transformación rígida PRE→POST. La máscara `Mass` publicada solo localiza la región de búsqueda; la candidata se calcula con las intensidades nativas POST. Se conservan las fuentes de ambas adquisiciones y del SEG, y se rechaza un reporte que cambie la referencia PRE utilizada. Un fallo de localización o separación devuelve abstención, sin máscara ni volumen nuevo. El navegador puede exportar los detalles de esa ejecución. La [guía automática POST](automatic-post-segmentation.md) distingue los controles de ingeniería de la validación anatómica pendiente.
 
 ## Medición y procedencia
 
