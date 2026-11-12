@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HCC-TACE Lab · Visor de investigación</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top"><a class="brand" href="/" aria-label="Inicio HCC-TACE Lab"><span aria-hidden="true">✧</span> HCC-TACE Lab</a><span class="purpose">Investigación · datos locales</span><button id="capture" class="quiet" data-html2canvas-ignore>Preparar imagen</button><a id="image-download" class="quiet" data-html2canvas-ignore download="HCC-TACE_Lab.png" hidden>Descargar PNG</a></header>
+  <main id="workspace">
+    <section class="intro"><div><div class="eyebrow">COMPARACIÓN LONGITUDINAL</div><h1>Revisa ambos estudios.</h1><p>TC antes y después de TACE, con acceso a las máscaras publicadas.</p></div><div class="case-select"><label for="case">Caso</label><select id="case" disabled><option>Cargando casos…</option></select><small id="catalog-status"></small></div></section>
+    <p id="alert" role="status" class="notice" hidden></p>
+    <div id="review" hidden>
+      <section class="viewers" aria-label="Visores de tomografía">
+        <article class="viewer pre" id="pre"><header><div><span class="dot"></span><strong>PRE-TACE</strong><span class="date" id="pre-date"></span></div><span id="pre-meta" class="meta"></span></header><div class="slice"><img id="pre-image" alt="Corte axial del estudio previo a TACE"><span class="marker a">A</span><span class="marker p">P</span><span class="marker r">R</span><span class="marker l">L</span></div><div class="scrub"><button id="pre-prev" aria-label="Corte PRE anterior">‹</button><input id="pre-index" aria-label="Corte PRE" type="range" min="1" max="1" value="1"><button id="pre-next" aria-label="Corte PRE siguiente">›</button><output id="pre-counter"></output></div><div class="slice-detail" id="pre-status" role="status"></div></article>
+        <article class="viewer post" id="post"><header><div><span class="dot"></span><strong>POST-TACE</strong><span class="date" id="post-date"></span></div><span id="post-meta" class="meta"></span></header><div class="slice"><img id="post-image" alt="Corte axial del estudio posterior a TACE"><span class="marker a">A</span><span class="marker p">P</span><span class="marker r">R</span><span class="marker l">L</span></div><div class="scrub"><button id="post-prev" aria-label="Corte POST anterior">‹</button><input id="post-index" aria-label="Corte POST" type="range" min="1" max="1" value="1"><button id="post-next" aria-label="Corte POST siguiente">›</button><output id="post-counter"></output></div><div class="slice-detail" id="post-status" role="status"></div></article>
+      </section>
+      <div class="toolbar"><label><input id="show-mask" type="checkbox"> Máscara PRE publicada</label><label><input id="link" type="checkbox"> Vincular recorrido</label><span id="link-note" hidden>Por posición relativa, sin registro anatómico.</span><details id="options"><summary>Series y ajustes</summary><div class="options-grid"><label>Serie PRE<select id="pre-series"></select></label><label>Adquisición PRE<select id="pre-stack"></select></label><label>Serie POST<select id="post-series"></select></label><label>Adquisición POST<select id="post-stack"></select></label><label>Etiqueta SEG<select id="segment"></select></label><label>Ventana <input id="width" type="number" min="2" max="3000" value="350"></label><label>Nivel <input id="level" type="number" min="-1000" max="3000" value="50"></label></div></details></div>
+      <section class="measurement"><div><div class="eyebrow">MÁSCARA PUBLICADA · PRE</div><h2 id="measure-title">Volumen de la máscara</h2><p id="measure-result" role="status">Selecciona una etiqueta y mide en su geometría nativa.</p></div><button id="measure" class="primary">Medir máscara PRE</button></section>
+      <section class="bottom"><div class="status"><span class="signal"></span><div><strong>Comparación pendiente</strong><p>Revisar fase, registro y máscara POST antes de calcular cambios.</p></div></div><a id="report" class="quiet" download>Exportar reporte JSON ↓</a></section>
+    </div>
+  </main>
+  <footer>HCC-TACE-Seg · <a href="https://doi.org/10.7937/TCIA.5FNA-0924" target="_blank" rel="noopener noreferrer">The Cancer Imaging Archive</a> · CC BY 4.0 <span>Visor de investigación</span></footer>
+  <script src="/html2canvas.min.js"></script><script type="module" src="/app.js"></script>
+</body>
+</html>

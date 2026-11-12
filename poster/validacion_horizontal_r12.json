@@ -1,0 +1,106 @@
+{
+  "pdf": "output/pdf/Poster_Tesis_Dimitri_Maciel_Horizontal_r12.pdf",
+  "dimensions_cm": [
+    120.0,
+    90.0
+  ],
+  "pages": 1,
+  "fonts": [
+    {
+      "font": "/AAAAAA+Arial-BoldMT",
+      "embedded": true
+    },
+    {
+      "font": "/AAAAAA+ArialMT",
+      "embedded": true
+    },
+    {
+      "font": "/AAAAAA+Arial-ItalicMT",
+      "embedded": true
+    }
+  ],
+  "scope": "Restore concise scientific context and evaluation plan; rebalance layout and enlarge pilot evidence; compact references with repository QR.",
+  "scientific_assets_unchanged": true,
+  "source_measurement": {
+    "case": "HCC_002",
+    "acquisition": "1",
+    "SEG_label": "Mass",
+    "SEG_segment": 2,
+    "stage": "PRE",
+    "voxels": 324430,
+    "linked_slices": 109,
+    "native_volume_cm3": 495.0408935546875,
+    "displayed_volume_cm3": "495,04"
+  },
+  "measurement_values_present": true,
+  "cohort_and_pilot_distinguished": true,
+  "future_scope_explicit": true,
+  "reference_numbers": [
+    "1",
+    "2",
+    "3"
+  ],
+  "text_outside_margins": 0,
+  "approx_text_character_box_percent": 16.355019297889715,
+  "visual_changes": {
+    "pilot_CT_edge_pt": {
+      "before": 238,
+      "after": 350
+    },
+    "area_plot_height_pt": {
+      "before": 145,
+      "after": 235
+    },
+    "comparison_of_implemented_and_planned_work": true,
+    "compact_hanging_reference_indents": true
+  },
+  "qr": {
+    "url": "https://github.com/dimitri-maciel/axivol-tracker",
+    "size_cm": 6.491,
+    "vector": true,
+    "quiet_zone_modules": 4,
+    "decoder": "zxing-cpp 3.1.1",
+    "decode_checks": [
+      {
+        "file": "Vista_previa_poster_horizontal_r12.png",
+        "decoded": [
+          "https://github.com/dimitri-maciel/axivol-tracker"
+        ]
+      },
+      {
+        "file": "Detalle_avances_horizontal_r12.png",
+        "decoded": [
+          "https://github.com/dimitri-maciel/axivol-tracker"
+        ]
+      },
+      {
+        "file": "Detalle_referencias_qr_horizontal_r12.png",
+        "decoded": [
+          "https://github.com/dimitri-maciel/axivol-tracker"
+        ]
+      }
+    ]
+  },
+  "links": [
+    "https://doi.org/10.1038/s41597-023-01928-3",
+    "https://doi.org/10.1038/s41597-023-01928-3",
+    "https://doi.org/10.1038/s41597-023-01928-3",
+    "https://doi.org/10.1038/s41597-023-01928-3",
+    "https://doi.org/10.1007/s11548-024-03181-4",
+    "https://doi.org/10.1007/s11548-024-03181-4",
+    "https://doi.org/10.1007/s11548-024-03181-4",
+    "https://doi.org/10.1007/s11548-024-03181-4",
+    "https://doi.org/10.1109/CVPR52734.2025.02875",
+    "https://doi.org/10.1109/CVPR52734.2025.02875",
+    "https://doi.org/10.1109/CVPR52734.2025.02875",
+    "https://github.com/dimitri-maciel/axivol-tracker",
+    "https://github.com/dimitri-maciel/axivol-tracker",
+    "https://doi.org/10.7937/TCIA.5FNA-0924",
+    "https://creativecommons.org/licenses/by/4.0/"
+  ],
+  "visual_review": [
+    "full poster",
+    "enlarged pilot evidence and evaluation plan",
+    "compact references and QR"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "collection": "HCC-TACE-Seg",
+  "doi": "10.7937/TCIA.5FNA-0924",
+  "cases": 105,
+  "series": 677,
+  "dicom_instances": 51968,
+  "dicom_bytes": 28570849894,
+  "representative_header_verified_per_series": true,
+  "representative_transfer_syntaxes": {
+    "1.2.840.10008.1.2.1": 677
+  },
+  "manifest_sha256": "b32d007c0c7c665c44570300190ce74891571bb33b7cb5949185ba5f9b7e6891",
+  "clinical_xlsx_bytes": 128507,
+  "clinical_xlsx_sha256": "e9d2683dc907819aa08e4027e085854f46464bec834a09e80fc83b19a89e092b",
+  "download_errors": 0
+}

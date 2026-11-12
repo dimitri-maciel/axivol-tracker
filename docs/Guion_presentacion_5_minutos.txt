@@ -1,0 +1,57 @@
+AXIVOL TRACKER — GUION DE PRESENTACIÓN
+Dimitri Maciel | Póster horizontal R12 | Duración aproximada: 5 minutos
+
+Los tiempos son orientativos. Las indicaciones entre paréntesis sirven para ensayar y no se leen. Llegar a la propuesta metodológica cerca del minuto dos.
+
+0:00-0:25 · Presentación
+(Señala el título.)
+
+Buenas tardes. Soy Dimitri Maciel y presentaré el avance de mi proyecto sobre seguimiento volumétrico del carcinoma hepatocelular antes y después de la quimioembolización transarterial, conocida como TACE. Estoy desarrollando Axivol Tracker, una aplicación para revisar tomografías y apoyar la comparación de una misma lesión entre estudios.
+
+0:25-1:10 · Problema y brecha
+(Señala los tres factores de la figura 1 y después el texto de la brecha. Haz una pausa entre los dos párrafos.)
+
+Para saber si una lesión cambió, primero debemos comparar estudios compatibles. Eso se complica porque el hígado se mueve al respirar, la lesión puede verse distinta según cuándo se tomó la imagen con contraste y la separación entre cortes puede ser diferente.
+
+Además, en los datos que utilizo ya tenemos delimitaciones de la lesión antes del tratamiento. A esas delimitaciones les llamamos máscaras. Todavía necesitamos una delimitación posterior revisada de la misma lesión, que sirva de referencia para evaluar las mediciones. Esa es la brecha que debemos resolver.
+
+1:10-1:35 · Pregunta y objetivos
+(Dirige la atención a la segunda columna.)
+
+Mi pregunta es: ¿qué precisión ofrece la comparación volumétrica al combinar la alineación del hígado con la identificación de la misma lesión? El objetivo es desarrollar y evaluar una aplicación de volumetría longitudinal. Para lograrlo, planteo tres objetivos específicos: verificar los pares de estudios, evaluar el registro y la segmentación, y cuantificar el error de las mediciones.
+
+1:35-2:05 · Estado del arte
+(Recorre la tabla sin leerla completa.)
+
+Tomé como referencia tres trabajos. Moawad y colaboradores aportan el conjunto de imágenes y las máscaras. Hering estudia un flujo de registro y segmentación en melanoma. Rokuss presenta LesionLocator para segmentación y seguimiento tridimensional. Estos antecedentes orientan la propuesta. Los métodos de seguimiento todavía requieren evaluación en esta colección. Mi aportación propuesta es verificar comparabilidad, conservar la procedencia de las mediciones y señalar cuáles necesitan revisión.
+
+2:05-3:20 · Propuesta metodológica
+(Recorre la figura 3 de izquierda a derecha.)
+
+El flujo propuesto tiene cuatro etapas.
+
+Primero, seleccionar: revisar la fase de contraste, la cobertura anatómica y la geometría de ambos estudios, conservando su identificación de origen.
+
+Segundo, alinear: comparar métodos de registro rígido, afín y deformable para encontrar regiones anatómicas correspondientes. La alineación debe revisarse antes de aceptar que estamos observando la misma zona.
+
+Tercero, delimitar: obtener y revisar las máscaras de la misma lesión en ambos momentos. Una máscara indica qué vóxeles pertenecen a la región que queremos medir. Actualmente utilizo una máscara PRE publicada; la segmentación posterior está pendiente.
+
+Cuarto, cuantificar: contar los vóxeles de la máscara y multiplicar ese número por el volumen físico de cada vóxel. Así obtenemos el volumen en centímetros cúbicos, conservando la geometría original de cada estudio.
+
+La alineación ayuda a localizar la lesión; cada volumen se calcula en su propia imagen. El registro y la segmentación posterior todavía deben desarrollarse y evaluarse.
+
+3:20-4:20 · Avances técnicos
+(Señala la franja negra, la TC, la gráfica y el volumen.)
+
+Actualmente dispongo de ciento cinco casos y seiscientas setenta y siete series DICOM. Ya están implementados el visor, la superposición de máscaras y la volumetría PRE.
+
+La demostración que presento corresponde a un solo caso piloto: HCC_002, adquisición uno, etiqueta Mass. Su máscara publicada abarca ciento nueve cortes vinculados y tiene un volumen de aproximadamente cuatrocientos noventa y cinco centímetros cúbicos.
+
+La gráfica muestra cómo varía el área de esa máscara entre cortes.
+
+Este avance demuestra la lectura y medición de una máscara existente. Todavía falta obtener y revisar la máscara POST para comparar ambos volúmenes. El volumen medido por sí solo no determina viabilidad ni respuesta al tratamiento.
+
+4:20-5:00 · Trabajo futuro y cierre
+(Señala la franja vino y las tres etapas pendientes.)
+
+Los siguientes pasos son verificar los pares de estudios, evaluar el registro y disponer de una referencia de segmentación posterior revisada. Después evaluaré el error volumétrico, el tiempo de revisión y las comparaciones que deban descartarse. Con Axivol Tracker busco que cada comparación tenga una procedencia clara, una revisión explícita y una medición que pueda evaluarse. El avance actual establece la base técnica; la comparación longitudinal será la siguiente etapa. Muchas gracias.
