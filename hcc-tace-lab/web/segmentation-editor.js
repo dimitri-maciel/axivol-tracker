@@ -172,6 +172,7 @@ export function createSegmentationEditor(adapter) {
     $('automatic-note').textContent = baseline?.source_segment_label.trim().toLowerCase() === 'mass'
       ? 'Uses the published baseline mask to locate the target. Segments follow-up CT.'
       : 'Select the published Mass structure in Baseline.';
+    syncViewportMask(baseline);
     $('editor').setAttribute('aria-busy', String(busy));
     for (const name of ['region', 'seed']) $(name + '-tool').setAttribute('aria-pressed', String(mode === name));
     viewport.classList.toggle('selecting', !!mode);
@@ -183,6 +184,40 @@ export function createSegmentationEditor(adapter) {
       document.getElementById('post-zoom-in').disabled = true;
       document.getElementById('post-zoom-out').disabled = true;
     }
+  }
+
+  function syncViewportMask(baseline) {
+    const label = document.getElementById('post-mask-state');
+    const action = document.getElementById('post-mask-action');
+    const reason = document.getElementById('post-mask-reason');
+    let hint = '';
+    if (candidate) {
+      label.textContent = $('overlay').checked
+        ? (isAutomatic(candidate) ? 'Automatic mask' : 'Manual mask') + ' · Unreviewed' : 'Mask hidden';
+      action.textContent = $('overlay').checked ? 'Hide mask' : 'Show mask';
+      action.disabled = false;
+    } else if (!busy && saved.some(selectable)) {
+      label.textContent = 'Saved mask available';
+      action.textContent = 'Show saved mask';
+      action.disabled = false;
+    } else {
+      const differentReference = saved.some(sourceMatches);
+      label.textContent = busy ? 'Generating follow-up mask…' : differentReference
+        ? 'No mask for this baseline reference' : 'No follow-up mask for this acquisition';
+      action.textContent = busy ? 'Generating…' : 'Generate mask';
+      action.disabled = $('automatic').disabled;
+      if (!source) hint = 'Select a follow-up acquisition.';
+      else if (!baseline || baseline.source_segment_label.trim().toLowerCase() !== 'mass') hint = 'Select a published Mass segmentation in Baseline.';
+      else if (source.issue) hint = source.issue;
+      else if (baseline.issue) hint = 'The baseline acquisition needs geometry review.';
+      else if (!source.interval_mm || !baseline.interval_mm) hint = 'Verified slice spacing is required.';
+      else if (attempt) hint = 'Automatic generation needs review.';
+      else if (differentReference) hint = 'Saved masks use a different baseline reference.';
+    }
+    action.classList.toggle('is-busy', busy && !candidate);
+    reason.textContent = hint;
+    reason.hidden = !hint;
+    document.getElementById('post-mask-details').hidden = !attempt && !$('message').classList.contains('error');
   }
 
   function setMode(next) {
@@ -294,6 +329,7 @@ export function createSegmentationEditor(adapter) {
         + decimal.format(item.volume_cm3) + ' cm³ · ' + item.id.slice(0, 8), item.id)));
     $('saved').disabled = !available.length;
     if (candidate) $('saved').value = candidate.id;
+    syncViewportMask(adapter.baselineSource());
   }
 
   async function readSaved(autoRestore = false) {
@@ -400,6 +436,16 @@ export function createSegmentationEditor(adapter) {
     if (item) restore(item);
   });
   $('overlay').addEventListener('change', () => { adapter.changed(); adapter.refreshImage(); });
+  document.getElementById('post-mask-action').addEventListener('click', () => {
+    if (candidate) {
+      $('overlay').checked = !$('overlay').checked;
+      $('overlay').dispatchEvent(new Event('change', {bubbles: true}));
+    } else {
+      const matching = saved.find(selectable);
+      if (matching) restore(matching);
+      else $('automatic').click();
+    }
+  });
   viewport.addEventListener('keydown', event => {
     if (event.key === 'Escape' && mode) { event.preventDefault(); setMode(null); }
   });

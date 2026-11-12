@@ -102,6 +102,8 @@ La caja del segmento PRE, transformada a POST, indica el objetivo en el corte co
 
 El modelo segmenta primero el corte indicado. Su propia máscara POST inicial sirve como contexto para propagar hacia cortes superiores e inferiores. Se procesan **todos los cortes de la adquisición POST**, incluidos los que quedan fuera de la extensión z de PRE. No se recorta la salida a la caja PRE ni se toma el volumen PRE como objetivo numérico. Por eso el objeto propuesto puede tener una extensión distinta.
 
+Esta propagación completa es una adaptación de Axivol. El script CT RECIST original limita los cortes analizados alrededor de una indicación RECIST hecha en POST. El [predictor upstream](https://github.com/bowang-lab/MedSAM2/blob/332f30d420f1d1b08e2a79b3ae6a602458808383/efficient_track_anything/efficienttam_video_predictor_npz.py) recorre la secuencia indicada y no se detiene automáticamente cuando una máscara queda vacía. Su [cabeza de presencia de objeto](https://github.com/bowang-lab/MedSAM2/blob/332f30d420f1d1b08e2a79b3ae6a602458808383/efficient_track_anything/modeling/efficienttam_base.py) puede apagar una predicción en un corte y volver a producirla después. Ni la memoria entre cortes ni ese score garantizan conservar la identidad anatómica de una lesión tratada.
+
 Esta arquitectura emplea características aprendidas de la imagen y memoria entre cortes. De manera esquemática:
 
 $$
@@ -167,6 +169,31 @@ Los umbrales empleados para estos controles son configuraciones del proyecto, no
 Ante un fallo, el resultado debe distinguir el punto en que ocurrió: registro, localización o delimitación. Un fallo de registro no equivale a ausencia de lesión. Una segmentación vacía o no resuelta tampoco demuestra respuesta completa al tratamiento.
 
 Las candidatas aceptadas por los controles conservan estado `unreviewed`; la transformación conserva `estimated_unverified`. Las mediciones clínicas POST y el porcentaje de cambio por tratamiento permanecen sin habilitar.
+
+### Control de coherencia entre localización y propagación
+
+Después de inferir todos los cortes y excluir el padding, se cuenta la máscara POST completa. Sea `N` su número de vóxeles y `N_dentro` el número que cae dentro de `roi_zyx`, la caja localizada con margen de búsqueda de 10 mm:
+
+$$
+f_{fuera}=\frac{N-N_{dentro}}{N}.
+$$
+
+Si `f_fuera > 0,5`, el sistema **se abstiene de guardar la candidata** con motivo `localization_propagation_mismatch`. Si la fracción es exactamente `0,5`, este control pasa. La región debe ser válida, estar dentro de la retícula POST y contener la caja inicial; de lo contrario, se rechaza antes de inferir. Una máscara vacía se rechaza por separado, antes de dividir entre `N`.
+
+El control no borra vóxeles fuera de la caja ni devuelve la intersección máscara–región. La máscara completa es la que se examina; una candidata que supera este control conserva también sus vóxeles externos. El diagnóstico `localization_consistency` registra caja, conteos dentro y fuera, fracción, límite, estado `passed` o `failed`, y `mask_clipped_to_region=false`.
+
+**El límite del 50 % es una regla de ingeniería elegida después de observar HCC_006.** No procede del artículo de MedSAM2 ni constituye un umbral clínico validado. Puede rechazar crecimiento real o un registro impreciso, y puede aceptar una estructura equivocada situada dentro de la región. HCC_002 y HCC_006 son casos de desarrollo de esta regla, no una evaluación independiente de sensibilidad o especificidad. Su finalidad actual es impedir que una discrepancia espacial grande se presente silenciosamente como candidata lista para revisión.
+
+Al aplicar el control a las salidas examinadas:
+
+| Caso y adquisición POST | Vóxeles dentro | Vóxeles fuera | Fracción fuera | Resultado del control |
+| --- | ---: | ---: | ---: | --- |
+| HCC_002, adquisición 1 | 444 793 | 0 | 0 % | Pasa; continúa `unreviewed`. |
+| HCC_006, adquisición 1 | 16 847 | 167 959 | 90,88 % | Abstención; no guardar como nueva candidata. |
+
+Los conteos corresponden a esas ejecuciones concretas y no sustituyen los resultados del primer piloto aislado descrito más abajo. Pasar el control no demuestra que el objeto sea tumor.
+
+En la interfaz, el mensaje principal informa que no se creó una candidata automática y que una máscara previa, si existía, permanece intacta. Los detalles del intento indican que la predicción se extiende principalmente fuera de la región localizada y piden revisar alineación y selección del objetivo. No indica ausencia de tumor ni respuesta al tratamiento. Antes de repetir, comprobar las adquisiciones seleccionadas, la lesión PRE de origen, la localización POST y las fases de contraste; la revisión anatómica sigue siendo necesaria. El diagnóstico permite distinguir este rechazo de un fallo de descarga del modelo o de una imagen que no pudo leerse.
 
 ## Qué medir para evaluar el método
 
@@ -251,9 +278,19 @@ Los pesos se descargan en `data/models`, separados del repositorio y de la image
 
 Desde `hcc-tace-lab`, las comprobaciones pertinentes son `docker compose exec -T app python -m unittest discover -s tests -p test_post_model.py -v` y la suite completa indicada en el README. Los tests sintéticos verifican contratos de software; no demuestran exactitud sobre lesiones reales. El conjunto de integración público requiere datos descargados y checkpoint verificado.
 
-El piloto del adaptador sobre HCC_002, adquisición POST 1, procesó los 97 cortes en aproximadamente 50 segundos con dos hilos de CPU y un pico observado de 524 MiB en el proceso aislado. La caja inicial del corte 67, contando desde cero, fue `[52,255,210,398]` en coordenadas xyxy de centros inclusivos. La candidata contenía 443 727 vóxeles, sin padding y sin tocar las caras de la adquisición. Estos son **resultados de ejecución de un piloto**, no resultados de precisión ni mediciones clínicas. El tiempo y la memoria pueden variar en la aplicación y con otras adquisiciones. La revisión visual de cortes distribuidos comprueba fallos evidentes de presentación y extensión, pero no sustituye una referencia anatómica independiente.
+El primer piloto aislado del adaptador sobre HCC_002, adquisición POST 1, procesó los 97 cortes en aproximadamente 50 segundos con dos hilos de CPU y un pico observado de 524 MiB. La caja inicial del corte 67, contando desde cero, fue `[52,255,210,398]` en coordenadas xyxy de centros inclusivos. La candidata contenía 443 727 vóxeles, sin padding y sin tocar las caras de la adquisición. Estos son **resultados de ejecución de un piloto**, no resultados de precisión ni mediciones clínicas. El tiempo y la memoria pueden variar en la aplicación y con otras adquisiciones. La revisión visual de cortes distribuidos comprueba fallos evidentes de presentación y extensión, pero no sustituye una referencia anatómica independiente.
 
 Una prueba inicial con la caja ampliada 10 mm produjo 521 996 vóxeles. La diferencia evidencia sensibilidad al prompt; no demuestra que una candidata sea mejor que otra. La configuración final utiliza la caja localizada sin margen por definición del flujo, no para aproximarse a un volumen esperado. La evaluación futura debe incluir perturbaciones de caja y error de registro, sin convertir el acuerdo entre predicciones en exactitud contra referencia.
+
+### Fallo observado en HCC_006
+
+Una ejecución posterior sobre HCC_006 utilizó PRE adquisición 3, segmento publicado 2 (`Mass`), y POST adquisición 1. La localización estimada señaló el corte POST 56, contando desde cero, con una caja z de `[49,62)`. La candidata generada se extendió de los cortes 4 a 59 y alcanzó su mayor área en el 32. La revisión visual sugirió que su continuación inferior había seguido una estructura de apariencia renal. La candidata se retiró de las propuestas activas y se conservó separada para auditoría; **no debe usarse como volumen de la lesión tratada**. No se publican aquí capturas de ese caso.
+
+Las comprobaciones de fuentes y geometría no identificaron una inversión de ejes ni sustitución de adquisición. Eso no demuestra que el registro localizara correctamente la lesión. La explicación compatible con lo observado es una deriva de seguimiento, posiblemente favorecida por una localización o indicación inicial imperfecta; separar ambas causas requiere revisión anatómica.
+
+La conectividad tampoco validó el resultado: una componente con conectividad de seis vecinos contenía 184 795 de los 184 806 vóxeles predichos y los 1 165 vóxeles del corte 56 de la candidata almacenada. La reproducción aislada del prompt produjo 1 166 píxeles; 1 140 se solapaban con esa componente dominante. La conectividad de 26 vecinos tampoco la separó. Por tanto, conservar la mayor componente conectada, o exigir conexión con el prompt, no habría eliminado el fallo. Una deriva puede ser continua y atravesar regiones contiguas.
+
+Después de este fallo se incorporó el control de fracción fuera de la región descrito arriba: detecta esta discrepancia sin recortar la máscara ni cambiar sus bordes. El área por corte, la trayectoria física del centroide y la presencia o desaparición del objeto siguen siendo señales adicionales para estudiar; no se presentan como controles automáticos ya implementados. Ninguna de estas señales prueba identidad anatómica. Recortar la candidata a la extensión PRE, detenerla a una distancia elegida después de mirar el resultado o asumir que una máscara vacía implica respuesta completa produciría conclusiones injustificadas. La regla incorporada y cualquier ampliación requieren evaluación contra referencias POST independientes.
 
 Como apoyo al desarrollo y a la revisión se utilizaron skills de manejo DICOM, diseño de estudios, documentación, código e interfaz. La skill `pydicom` reconoce la biblioteca *Scientific Agent Skills: A Library of Procedural Knowledge for Research Agents*, de Kassis y colaboradores, preprint de 2026, [arXiv:2609.00065](https://arxiv.org/abs/2609.00065), DOI [10.48550/arXiv.2609.00065](https://doi.org/10.48550/arXiv.2609.00065). Este crédito corresponde a instrucciones de apoyo; no identifica el método de segmentación ni aporta evidencia de su exactitud.
 

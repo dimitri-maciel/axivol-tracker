@@ -83,6 +83,10 @@
             </div>
             <div class="scrub"><button id="post-prev" class="icon-button" aria-label="Previous follow-up slice">‹</button><input id="post-index" aria-label="Follow-up slice" type="range" min="1" max="1" value="1"><button id="post-next" class="icon-button" aria-label="Next follow-up slice">›</button><output id="post-counter"></output></div>
             <p id="post-status" class="slice-detail"></p>
+            <div class="post-mask-state" role="status">
+              <div class="post-mask-copy"><span id="post-mask-state">No follow-up mask for this acquisition</span><small id="post-mask-reason" hidden></small></div>
+              <div class="post-mask-actions"><button id="post-mask-action" class="button secondary" disabled>Generate mask</button><a id="post-mask-details" href="#candidate-editor" hidden>Review details</a></div>
+            </div>
             <details class="study-settings"><summary>Study details</summary><div class="study-fields"><label for="post-series">Series<select id="post-series"></select></label><label for="post-stack">Acquisition<select id="post-stack"></select></label><dl class="source-details"><dt>Series UID</dt><dd id="post-uid"></dd><dt>Pixel spacing</dt><dd id="post-spacing"></dd></dl></div></details>
           </article>
         </div>

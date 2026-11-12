@@ -90,6 +90,12 @@ input[type=checkbox] { width: 18px; height: 18px; margin: 0; accent-color: var(-
 .scrub { display: flex; align-items: center; gap: 5px; padding: 0 10px; }
 .scrub input { flex: 1; min-width: 0; height: 32px; margin: 0; accent-color: var(--accent); }
 .scrub output { min-width: 66px; text-align: right; padding-right: 3px; color: var(--text); font-variant-numeric: tabular-nums; font-size: 12px; }
+.post-mask-state { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px; border-top: 1px solid var(--line); }
+.post-mask-copy { flex: 1 1 170px; font-size: 12px; line-height: 1.5; }
+.post-mask-copy small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+.post-mask-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.post-mask-actions .button { min-height: 36px; padding: 7px 10px; font-size: 12px; }
+.post-mask-actions a { font-size: 12px; color: var(--accent); }
 .slice-detail { min-height: 34px; font-size: 11px; padding: 3px 16px 12px; }
 .study-settings { border-top: 1px solid var(--line); }
 summary { padding: 13px 16px; min-height: 44px; font-size: 12px; color: #d4dde7; }

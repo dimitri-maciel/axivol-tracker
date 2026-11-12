@@ -24,6 +24,7 @@ MODEL_SIZE = 512
 MAX_VOXELS = 64_000_000
 MAX_SLICES = 256
 MAX_SECONDS = 300.0
+MAX_OUTSIDE_ROI_FRACTION = .5  # Engineering abstention gate, not anatomical validation.
 _LOCK = threading.Lock()
 _PREDICTOR = None
 _PREDICTOR_PATH = None
@@ -72,7 +73,39 @@ def _validate_inputs(hu, spacing_zyx, location, valid_mask, diagnostics):
     box = np.asarray([lo[2], lo[1], hi[2]-1, hi[1]-1], dtype=np.float32)
     if valid_mask is not None and not valid_mask[z, lo[1]:hi[1], lo[2]:hi[2]].any():
         _fail('The initial POST prompt contains no valid image pixels.', 'invalid_prompt', diagnostics)
-    return z, box
+    try:
+        roi = np.asarray(location['roi_zyx'], dtype=float)
+    except (KeyError, ValueError, TypeError):
+        _fail('The registered POST search region is incomplete.', 'invalid_search_region', diagnostics)
+    if (roi.shape != (2, 3) or not np.isfinite(roi).all()
+            or not np.equal(roi, np.floor(roi)).all()
+            or np.any(roi[0] < 0) or np.any(roi[1] > hu.shape)
+            or np.any(roi[0] > lo) or np.any(roi[1] < hi)):
+        _fail('The registered search region must contain the prompt within POST.', 'invalid_search_region', diagnostics)
+    return z, box, roi.astype(int)
+
+
+def _check_localization_consistency(mask, roi, diagnostics):
+    """Abstain on gross propagation drift; never clip a prediction to PRE.
+
+    The expanded registered search box is only a consistency reference. Passing
+    does not verify anatomy; failing can also reflect growth or registration error.
+    This engineering gate was introduced after the HCC_006 development failure.
+    """
+    count = int(np.count_nonzero(mask))  # Caller has already rejected empty masks.
+    inside = int(np.count_nonzero(mask[tuple(slice(int(a), int(b)) for a, b in zip(*roi))]))
+    outside_fraction = (count-inside)/count
+    passed = outside_fraction <= MAX_OUTSIDE_ROI_FRACTION
+    diagnostics['localization_consistency'] = {
+        'search_region_zyx': roi.tolist(), 'inside_voxels': inside,
+        'outside_voxels': count-inside, 'outside_fraction': outside_fraction,
+        'max_outside_fraction': MAX_OUTSIDE_ROI_FRACTION,
+        'status': 'passed' if passed else 'failed', 'mask_clipped_to_region': False,
+    }
+    if not passed:
+        _fail('Prediction extends mostly outside the localized target region. '
+              'Review alignment and target selection before generating another mask.',
+              'localization_propagation_mismatch', diagnostics)
 
 
 class _NativeFrames:
@@ -128,7 +161,7 @@ def _mask_from_logits(logits, native_shape, diagnostics):
 def segment_post_model(post_hu, spacing_zyx, location, *, checkpoint_path, valid_mask=None):
     """Devuelve máscara bool nativa y diagnóstico; nunca recibe píxeles/SEG PRE.
 
-Los controles aquí verifican ejecución, geometría y cobertura, no exactitud
+Los controles aquí verifican ejecución, geometría, cobertura y coherencia espacial, no exactitud
 anatómica. La candidata sigue unreviewed aunque todos estos controles pasen.
 """
     started = time.perf_counter()
@@ -145,7 +178,7 @@ anatómica. La candidata sigue unreviewed aunque todos estos controles pasen.
                                 'propagation': 'all_POST_slices_bidirectional',
                                 'cuda_hole_filling': False, 'max_seconds': MAX_SECONDS},
                    'warnings': ['Training overlap with HCC-TACE-Seg has not been established.']}
-    z, box = _validate_inputs(post_hu, spacing_zyx, location, valid_mask, diagnostics)
+    z, box, roi = _validate_inputs(post_hu, spacing_zyx, location, valid_mask, diagnostics)
     diagnostics.update(prompt_slice_index=z, prompt_box_xyxy=box.tolist(),
                        prompt_box_convention='inclusive_pixel_centers',
                        localization_box_zyx=location['localized_box_zyx'])
@@ -195,6 +228,7 @@ anatómica. La candidata sigue unreviewed aunque todos estos controles pasen.
         count = int(np.count_nonzero(mask))
         if not count:
             _fail('The model produced no valid POST region.', 'empty_prediction', diagnostics)
+        _check_localization_consistency(mask, roi, diagnostics)
         edge_faces = [name for name, plane in (
             ('z_min', mask[0]), ('z_max', mask[-1]), ('y_min', mask[:, 0]),
             ('y_max', mask[:, -1]), ('x_min', mask[:, :, 0]), ('x_max', mask[:, :, -1])) if plane.any()]
