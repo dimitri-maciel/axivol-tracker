@@ -11,6 +11,9 @@ services:
         source: ${HCC_DATA_DIR:-./data}
         target: /data
         read_only: true
+      - type: volume
+        source: annotations
+        target: /annotations
     read_only: true
     tmpfs:
       - /tmp
@@ -33,3 +36,5 @@ services:
         target: /data
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
+volumes:
+  annotations:

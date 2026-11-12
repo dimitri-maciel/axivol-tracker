@@ -65,9 +65,12 @@
             <header class="viewer-heading"><div><h2 id="post-title">Follow-up</h2><span class="study-stage">Post-TACE</span></div><time id="post-date"></time></header>
             <div class="slice" id="post-viewport" tabindex="0" role="group" aria-label="Follow-up CT image. Use up and down arrow keys to scroll slices." aria-busy="true">
               <img id="post-image" alt="Follow-up axial CT" draggable="false" hidden>
+              <svg id="candidate-guides" class="candidate-guides" aria-hidden="true"></svg>
+              <span id="candidate-tool-hint" class="candidate-tool-hint" hidden></span>
               <span class="frame-message" id="post-image-state" role="status">Loading image…</span>
               <span class="marker a"></span><span class="marker p"></span><span class="marker r"></span><span class="marker l"></span>
               <span class="view-label">CT</span>
+              <span id="post-overlay-label" class="overlay-label candidate-overlay-label" hidden><i></i>Candidate · Unreviewed</span>
             </div>
             <div class="viewport-tools">
               <span id="post-meta" class="acquisition-meta"></span>
@@ -81,6 +84,49 @@
           </article>
         </div>
         <div class="viewer-help"><span>Click an image to scroll with the mouse or ↑ ↓.</span><span>Drag to pan when zoomed.</span></div>
+        <section id="candidate-editor" class="candidate-editor" aria-labelledby="candidate-title">
+          <div class="candidate-heading"><h2 id="candidate-title">Follow-up mask</h2><span id="candidate-status" class="status-tag">No candidate</span></div>
+          <div class="candidate-grid">
+            <div class="candidate-region">
+              <p class="field-label">Region and seed</p>
+              <div class="candidate-tools" role="group" aria-label="Follow-up selection tools">
+                <button id="candidate-region-tool" class="button secondary" aria-pressed="false" disabled>Draw region</button>
+                <button id="candidate-seed-tool" class="button secondary" aria-pressed="false" disabled>Pick seed</button>
+              </div>
+              <p id="candidate-selection" class="field-hint">Draw a region on the follow-up image, then pick a seed inside it.</p>
+              <details class="candidate-coordinates"><summary>Edit coordinates</summary><div class="coordinate-fields">
+                <label>Left<input id="candidate-x0" type="number" min="1" step="1" aria-label="Region first column"></label>
+                <label>Right<input id="candidate-x1" type="number" min="1" step="1" aria-label="Region last column"></label>
+                <label>Top<input id="candidate-y0" type="number" min="1" step="1" aria-label="Region first row"></label>
+                <label>Bottom<input id="candidate-y1" type="number" min="1" step="1" aria-label="Region last row"></label>
+                <label>Seed column<input id="candidate-seed-x" type="number" min="1" step="1"></label>
+                <label>Seed row<input id="candidate-seed-y" type="number" min="1" step="1"></label>
+                <label>Seed slice<input id="candidate-seed-z" type="number" min="1" step="1"></label>
+              </div><p class="field-hint">Coordinates start at 1. Row 1 is the top of the image.</p></details>
+            </div>
+            <div class="candidate-parameters">
+              <div class="candidate-inputs"><label>First slice<input id="candidate-first" type="number" min="1" step="1" required></label><label>Last slice<input id="candidate-last" type="number" min="1" step="1" required></label></div>
+              <div class="candidate-inputs"><label>Lower HU<input id="candidate-lower" type="number" step="any" required placeholder="Minimum"></label><label>Upper HU<input id="candidate-upper" type="number" step="any" required placeholder="Maximum"></label></div>
+              <p id="candidate-seed-hu" class="field-hint" aria-live="polite">Pick a seed to inspect its HU value.</p>
+              <p class="field-hint">Grow from the seed within this region and HU range.</p>
+              <button id="candidate-generate" class="button primary" disabled>Generate candidate</button>
+            </div>
+            <div class="candidate-output">
+              <label for="candidate-saved" class="field-label">Saved candidates</label><select id="candidate-saved" disabled><option value="">No saved candidates</option></select>
+              <div id="candidate-result" hidden>
+                <div class="candidate-volume"><strong id="candidate-volume">—</strong><span>cm³</span></div>
+                <p class="field-hint">Candidate volume · <span id="candidate-voxels">—</span> voxels</p>
+                <p id="candidate-source" class="field-hint"></p>
+                <label class="toggle-control" for="candidate-overlay"><input id="candidate-overlay" type="checkbox" checked><span class="swatch"></span>Show candidate</label>
+                <a id="candidate-export" class="button secondary" download>Download mask</a>
+              </div>
+              <p id="candidate-empty" class="field-hint">No follow-up mask generated for this acquisition.</p>
+            </div>
+          </div>
+          <p id="candidate-message" class="candidate-message" role="status">Choose a region, seed and HU range to begin.</p>
+          <ul id="candidate-warnings" class="candidate-warnings" hidden></ul>
+          <p class="candidate-scope">Candidate only. Requires expert review; excluded from treatment-response calculations.</p>
+        </section>
       </section>
       <aside class="analysis-panel" aria-label="Segmentation and measurements">
         <section class="segmentation-section">
@@ -99,7 +145,7 @@
         </section>
         <section class="comparison-section">
           <div class="section-heading"><h2>Comparison</h2><span class="status-tag">Pending</span></div>
-          <dl class="review-status"><div><dt>Contrast phase</dt><dd>Not verified</dd></div><div><dt>Registration</dt><dd>Pending</dd></div><div><dt>Follow-up segmentation</dt><dd>Unavailable</dd></div></dl>
+          <dl class="review-status"><div><dt>Contrast phase</dt><dd>Not verified</dd></div><div><dt>Registration</dt><dd>Pending</dd></div><div><dt>Follow-up segmentation</dt><dd id="followup-segmentation-status">Unavailable</dd></div></dl>
           <div class="volume-change"><span>Volume change</span><strong>Not calculated</strong></div>
         </section>
       </aside>

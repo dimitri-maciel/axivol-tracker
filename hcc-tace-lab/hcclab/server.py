@@ -16,6 +16,7 @@ STATIC = {
     '/styles.css':('styles.css','text/css; charset=utf-8'),
     '/app.js':('app.js','text/javascript; charset=utf-8'),
     '/frame-loader.js':('frame-loader.js','text/javascript; charset=utf-8'),
+    '/segmentation-editor.js':('segmentation-editor.js','text/javascript; charset=utf-8'),
     '/html2canvas.min.js':('html2canvas.min.js','text/javascript; charset=utf-8'),
 }
 WEB = Path(__file__).resolve().parents[1]/'web'
@@ -71,6 +72,37 @@ def handler(lab: Lab):
                 self.log_error('DICOM read failed: %s',type(e).__name__)
                 self.json(422,{'error':'This acquisition or its DICOM encoding could not be read.'})
 
+        def do_POST(self):
+            """Only small, same-origin JSON requests can create local candidates."""
+            try:
+                host = self.headers.get('Host', '')
+                if urlsplit('//' + host).hostname not in ('127.0.0.1', 'localhost', '::1'):
+                    return self.json(403, {'error': 'This viewer only accepts local requests.'})
+                origin = self.headers.get('Origin')
+                if ((origin is not None and origin != 'http://' + host)
+                        or self.headers.get('Sec-Fetch-Site') == 'cross-site'):
+                    return self.json(403, {'error': 'Use the local app to create a candidate.'})
+                if self.path != '/api/candidates':
+                    return self.json(404, {'error': 'Route not found.'})
+                if self.headers.get_content_type() != 'application/json':
+                    return self.json(415, {'error': 'Send an application/json request.'})
+                if self.headers.get('Transfer-Encoding'):
+                    return self.json(400, {'error': 'Chunked requests are not supported.'})
+                size = int(self.headers.get('Content-Length', '0'))
+                if not 0 < size <= 8192:
+                    return self.json(413, {'error': 'Candidate parameters must fit in 8 KB.'})
+                payload = json.loads(self.rfile.read(size))
+                return self.json(201, lab.create_candidate(payload))
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            except KeyError as error:
+                self.json(404, {'error': str(error).strip("'")})
+            except (GeometryError, ValueError, UnicodeError) as error:
+                self.json(422, {'error': str(error)})
+            except (AttributeError, OSError, RuntimeError, InvalidDicomError) as error:
+                self.log_error('Candidate generation failed: %s', type(error).__name__)
+                self.json(422, {'error': 'The candidate could not be generated or saved. Check the acquisition and annotation storage.'})
+
         def route(self,path,q):
             if path in STATIC:
                 name,mime = STATIC[path]
@@ -82,11 +114,25 @@ def handler(lab: Lab):
                 return self.json(200,lab.catalog.overview())
             if m:=re.fullmatch(r'/api/cases/(HCC_\d+)',path):
                 return self.json(200,lab.catalog.case(m[1]))
-            if m:=re.fullmatch(r'/api/series/([\d.]{3,100})(?:/(slice|volume))?',path):
+            if path == '/api/candidates':
+                return self.json(200, lab.list_candidates(q.get('case', [''])[0], q.get('series', [''])[0],
+                                                         integer(q, 'stack', 0, 0, 999)))
+            if m := re.fullmatch(r'/api/candidates/([a-f0-9]{32})(/export)?', path):
+                candidate_id, export = m.groups()
+                document = lab.candidates.metadata(candidate_id)
+                lab.candidate_for_stack(candidate_id, document['series_uid'], document['stack_index'])
+                if export:
+                    return self.send_data(200, lab.candidates.export(candidate_id), 'application/zip',
+                                          Content_Disposition=f'attachment; filename="{document["case_id"]}_POST_candidate_{candidate_id[:8]}.zip"')
+                return self.json(200, document)
+            if m:=re.fullmatch(r'/api/series/([\d.]{3,100})(?:/(slice|volume|voxel))?',path):
                 uid,kind = m.groups()
                 if kind is None:
                     return self.json(200,lab.series(uid))
                 stack = integer(q,'stack',0,0,999)
+                if kind == 'voxel':
+                    return self.json(200, lab.voxel(uid, stack, integer(q, 'index', 0, 0, 10000),
+                                                   integer(q, 'row', 0, 0, 10000), integer(q, 'column', 0, 0, 10000)))
                 segment = integer(q,'segment',None,1,65535)
                 if kind=='volume':
                     if segment is None:
@@ -95,12 +141,12 @@ def handler(lab: Lab):
                 n = integer(q,'index',0,0,10000)
                 level = integer(q,'level',50,-1000,3000)
                 width = integer(q,'width',350,2,3000)
-                return self.send_data(200,lab.image(uid,stack,n,level,width,segment),'image/png')
+                return self.send_data(200,lab.image(uid,stack,n,level,width,segment,q.get('candidate',[None])[0]),'image/png')
             if path=='/api/report':
                 case = q.get('case',[''])[0]
                 report = lab.report(case,q.get('pre',[''])[0],integer(q,'preStack',0,0,999),
                                     q.get('post',[''])[0],integer(q,'postStack',0,0,999),
-                                    integer(q,'segment',None,1,65535))
+                                    integer(q,'segment',None,1,65535),q.get('candidate',[None])[0])
                 report['exported_utc'] = datetime.now(timezone.utc).isoformat()
                 return self.json(200,report,Content_Disposition=f'attachment; filename="{case}_report.json"')
             raise KeyError('Route not found.')
@@ -110,10 +156,11 @@ def handler(lab: Lab):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--data',type=Path,default=Path('/data'))
+    p.add_argument('--annotations',type=Path,default=Path('/annotations'))
     p.add_argument('--host',default='127.0.0.1')
     p.add_argument('--port',type=int,default=8000)
     a = p.parse_args()
-    with ThreadingHTTPServer((a.host,a.port),handler(Lab(a.data))) as server:
+    with ThreadingHTTPServer((a.host,a.port),handler(Lab(a.data,a.annotations))) as server:
         print(f'HCC-TACE Lab · http://{a.host}:{a.port} · {a.data}',flush=True)
         server.serve_forever()
 

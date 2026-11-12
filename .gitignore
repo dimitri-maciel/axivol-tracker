@@ -4,6 +4,9 @@ tmp/
 .venv/
 node_modules/
 **/data/
+**/annotations/
+*.npz
+*.npy
 .env
 .env.*
 !.env.example

@@ -2,7 +2,7 @@
 
 Aplicación local para explorar tomografías de carcinoma hepatocelular antes y después de TACE, revisar las segmentaciones publicadas y medir su volumen en la geometría original.
 
-La interfaz está en inglés. Incluye dos visores, selección de serie y adquisición, ventana y nivel, zoom, navegación por cortes y exportación de reportes. El registro entre estudios, las máscaras POST y la comparación longitudinal están pendientes. El volumen de una máscara no determina viabilidad ni respuesta al tratamiento.
+La interfaz está en inglés. Incluye dos visores, selección de serie y adquisición, ventana y nivel, zoom, navegación por cortes y exportación de reportes. El editor **Follow-up mask** genera candidatos POST mediante una región, una semilla y límites HU, con revisión visual y exportación de la máscara y su procedencia. El registro entre estudios, las referencias POST expertas y la comparación longitudinal siguen pendientes. El volumen de un candidato no determina viabilidad ni respuesta al tratamiento.
 
 ## Iniciar
 
@@ -25,6 +25,8 @@ Abre [Axivol Tracker](http://127.0.0.1:8770/?case=HCC_002). La aplicación se si
 - [Ejecución, descarga de datos y pruebas](hcc-tace-lab/README.md).
 - [Arquitectura y decisiones técnicas](hcc-tace-lab/docs/decisiones.md).
 - [Interfaz y verificación en navegador](hcc-tace-lab/docs/interface-design.md).
+- [Generación de candidatos POST: uso, método y evaluación](hcc-tace-lab/docs/post-segmentation.md).
+- [Matemáticas de la segmentación, geometría y métricas](hcc-tace-lab/docs/post-segmentation-math.md).
 
 ## Estructura
 
@@ -39,7 +41,7 @@ hcc-tace-lab/
   requirements.txt  Dependencias de Python
 ```
 
-Los datos descargados, capturas, reportes generados y materiales de preparación de la exposición permanecen fuera del repositorio. Las pruebas generan sus resultados localmente en `output/`.
+Los datos descargados, máscaras, capturas, reportes generados y materiales de preparación de la exposición permanecen fuera del repositorio. Las máscaras candidatas se guardan en un volumen Docker separado. Las pruebas generan sus resultados localmente en `output/`.
 
 ## Verificar
 
@@ -50,6 +52,8 @@ docker compose exec -T -e HCC_PILOT_TEST=1 app python -m unittest discover -s te
 ```
 
 El caso de comprobación es **HCC_002, adquisición PRE 1, etiqueta Mass (segmento 2)**: 324 430 vóxeles y 495,04 cm³. Esta prueba verifica la lectura y medición de una máscara publicada; no evalúa el desempeño clínico ni toda la colección.
+
+Las pruebas POST utilizan una región pequeña de la adquisición 1 de HCC_002 para verificar geometría, superposición y exportación. Esa región de prueba no es una anotación tumoral. Los candidatos conservan el estado `unreviewed`; las medidas de respuesta permanecen sin calcular.
 
 ## Atribución
 

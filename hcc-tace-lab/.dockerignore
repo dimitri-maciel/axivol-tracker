@@ -1,4 +1,7 @@
 data/
+annotations/
+*.npz
+*.npy
 .git/
 __pycache__/
 *.pyc

@@ -8,6 +8,9 @@
 | `geometry.py` | Orden físico de cortes, compatibilidad espacial y volumen. No accede al navegador ni a la red. |
 | `catalog.py` | Consulta del manifiesto y disponibilidad de estudios locales. |
 | `dicom.py` | Lectura de píxeles, referencias DICOM SEG y representación de cortes. |
+| `volume.py` | Carga cuantitativa HU, exclusión de padding y validación de la rejilla CT nativa. |
+| `segmentation.py` | Componente conexa de una semilla dentro de ROI y rango HU, independiente de archivos e interfaz. |
+| `candidates.py` | Persistencia inmutable, integridad y exportación de candidatos con procedencia. |
 | `lab.py` | Operaciones de la aplicación compartidas por servidor y pruebas. |
 | `server.py` | Adaptador HTTP para las operaciones y los archivos estáticos. |
 | `web/` | Presentación, controles y carga de imágenes en el navegador. |
@@ -20,6 +23,10 @@ El corpus DICOM y su manifiesto son la fuente de datos. Esta etapa no requiere u
 
 `compose.yaml` separa la ingesta, que escribe en `data/`, del visor, que monta esa carpeta en solo lectura. Los datos, archivos descargados, secretos y dependencias locales se excluyen de Git y del contexto de construcción de Docker.
 
+El volumen Docker `annotations` conserva candidatos nuevos en `/annotations`, separado del corpus. Cada generación publica atómicamente un directorio con máscara NPZ y metadatos JSON. Sus identificadores son aleatorios; cambiar parámetros crea otra versión. Las huellas de los archivos fuente forman parte de la clave de caché HU. Al reutilizar un candidato se comprueban sus referencias y sus fuentes, conservando el resultado de la comprobación mientras no cambian tamaño, fecha de modificación o identidad de los archivos.
+
+El primer método POST es crecimiento por umbral con conectividad de seis vecinos, implementado con SciPy. No emplea la máscara PRE, no remuestrea la adquisición ni aprende parámetros de pacientes. Se limita el volumen a 64 millones de vóxeles y la ROI a cuatro millones. Las razones, ecuaciones y limitaciones se explican en la [guía de segmentación](post-segmentation.md).
+
 ## Medición y procedencia
 
 - Las adquisiciones de una misma serie se separan antes de ordenar sus cortes.
@@ -28,6 +35,7 @@ El corpus DICOM y su manifiesto son la fuente de datos. Esta etapa no requiere u
 - Cada resultado identifica caso, adquisición, etiqueta, conteo de vóxeles y geometría.
 - Una máscara PRE no se utiliza para inferir el volumen POST ni una respuesta al tratamiento.
 - Los estados de referencias ausentes, geometría incompatible y comparación pendiente se presentan explícitamente.
+- Una máscara nueva se identifica como candidata sin revisar. Su volumen aparece en `post_candidate`, separado de una referencia clínica; no habilita porcentajes de respuesta.
 
 ## Interfaz y pruebas
 

@@ -15,6 +15,23 @@ Abre [HCC_002](http://127.0.0.1:8770/?case=HCC_002). La interfaz está en inglé
 
 Haz clic en una imagen para recorrer sus cortes con la rueda o las flechas del teclado. Los botones de zoom permiten ampliar y arrastrar la imagen. **Link scrolling** vincula los recorridos por posición relativa, sin afirmar alineación anatómica. **Reset display** restaura zoom y ventana/nivel. **Export image** descarga una captura PNG.
 
+## Generar una máscara POST candidata
+
+Actualiza el contenedor con `docker compose up --build -d app`. Debajo de los visores encontrarás **Follow-up mask**:
+
+1. Abre la serie y adquisición POST que quieras estudiar. Revisa su fase y cobertura; la selección cronológica no las verifica.
+2. Usa **Draw region** para delimitar una caja sobre la imagen y elige el primer y último corte que abarcará. También puedes introducir las coordenadas numéricas.
+3. Usa **Pick seed** para colocar un punto dentro de la región. La lectura **Seed HU** ayuda a elegir los límites de intensidad; no identifica tejido por sí sola.
+4. Introduce ambos límites HU y pulsa **Generate candidate**. El método conserva únicamente los vóxeles conectados con la semilla dentro de la caja y del intervalo.
+5. Recorre los cortes con y sin superposición. Si el borde es incorrecto, ajusta la región, semilla o umbrales y genera otra versión. Todavía no incluye corrección manual con pincel.
+6. Exporta el candidato como ZIP: `mask.npz` contiene la máscara booleana en orden `[z,y,x]`; `metadata.json` conserva parámetros, geometría, referencias DICOM y huellas de los archivos fuente. No es todavía un DICOM SEG ni un NIfTI.
+
+Las máscaras se guardan en el volumen Docker `hcc-tace-lab_annotations`, montado en `/annotations`. Los DICOM de `/data` siguen en modo de solo lectura. Reiniciar o reconstruir la app conserva los candidatos; `docker compose down -v` elimina los volúmenes, por lo que no debe usarse si se desean conservar. Usa la exportación para guardar una copia independiente.
+
+El volumen mostrado corresponde a la **región candidata**, con estado **Unreviewed**. No es una referencia clínica ni una medida de tumor viable. `post_candidate` aparece separado en el reporte; `post_segmentation_measurement` y `volume_change_percent` continúan en `null`.
+
+Consulta la [guía de método, uso y evaluación](docs/post-segmentation.md) y la [explicación de matemáticas y código](docs/post-segmentation-math.md).
+
 Las cargas de cortes se agrupan para priorizar la última posición solicitada. Una caché acotada y la precarga de cortes cercanos reducen las esperas. La [guía de interfaz](docs/interface-design.md) documenta los criterios de diseño, accesibilidad y comprobaciones de navegador.
 
 Para toda la colección y comprobación de progreso:

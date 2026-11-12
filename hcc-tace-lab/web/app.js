@@ -1,4 +1,5 @@
 import {FrameLoader} from './frame-loader.js';
+import {createSegmentationEditor} from './segmentation-editor.js';
 
 const $ = id => document.getElementById(id);
 const frames = new FrameLoader();
@@ -12,6 +13,20 @@ const state = {
 };
 const number = new Intl.NumberFormat('en-US', {maximumFractionDigits: 2});
 const integer = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
+const editor = createSegmentationEditor({
+  ready: () => !!state.views.post?.ready,
+  displayedIndex: () => state.views.post?.displayedIndex,
+  transform: () => state.display.post,
+  resetZoom: () => setZoom('post', 1),
+  updateTransform: () => updateTransform('post'),
+  changed: () => reportLink(),
+  refreshImage() {
+    // Do not leave pixels from a previous candidate visible during an overlay change.
+    $('post-image').hidden = true;
+    $('post-overlay-label').hidden = true;
+    showSlice('post');
+  },
+});
 
 async function json(url) {
   let response;
@@ -56,6 +71,7 @@ function reportLink() {
     post: state.views.post.uid, postStack: $('post-stack').value,
   });
   if ($('segment').value) query.set('segment', $('segment').value);
+  if (editor.candidate) query.set('candidate', editor.candidate.id);
   $('report').href = '/api/report?' + query;
 }
 
@@ -64,6 +80,7 @@ function syncActions() {
   $('measure').disabled = state.measuring || !state.views.pre?.ready
     || !selectedSegment() || !stack?.interval_mm;
   $('show-mask').disabled = !selectedSegment();
+  editor.sync();
   reportLink();
 }
 
@@ -90,6 +107,7 @@ function updateTransform(stage) {
   element(stage, 'zoom').textContent = Math.round(display.zoom * 100) + '%';
   element(stage, 'zoom-out').disabled = display.zoom <= 1 || !state.views[stage]?.ready;
   element(stage, 'zoom-in').disabled = display.zoom >= 3 || !state.views[stage]?.ready;
+  if (stage === 'post') editor.drawGuides();
 }
 
 function setZoom(stage, zoom) {
@@ -121,6 +139,8 @@ async function showSlice(stage) {
   });
   const segment = stage === 'pre' && $('show-mask').checked ? selectedSegment() : null;
   if (segment) query.set('segment', segment.number);
+  const candidateId = stage === 'post' ? editor.overlayId : null;
+  if (candidateId) query.set('candidate', candidateId);
   element(stage, 'index').setAttribute('aria-valuetext', 'Requested slice ' + (index + 1) + ' of ' + stack.slices);
   element(stage, 'prev').disabled = index === 0;
   element(stage, 'next').disabled = index + 1 >= stack.slices;
@@ -132,6 +152,7 @@ async function showSlice(stage) {
   }
   frameState(stage, 'Loading slice ' + (index + 1) + '…');
   syncActions();
+  if (stage === 'post') editor.drawGuides();
   const image = new Image();
   image.id = stage + '-image';
   image.alt = (stage === 'pre' ? 'Baseline' : 'Follow-up') + ' CT, slice ' + (index + 1) + ' of ' + stack.slices;
@@ -147,6 +168,7 @@ async function showSlice(stage) {
     element(stage, 'image').replaceWith(image);
     frames.pin(stage, url);
     view.ready = true;
+    view.displayedIndex = index;
     element(stage, 'counter').textContent = (index + 1) + ' / ' + stack.slices;
     element(stage, 'index').setAttribute('aria-valuetext', 'Slice ' + (index + 1) + ' of ' + stack.slices);
     if (stage === 'pre') {
@@ -155,6 +177,7 @@ async function showSlice(stage) {
     }
     frameState(stage, '');
     updateTransform(stage);
+    if (stage === 'post') editor.frameChanged(index, candidateId);
     const neighbors = [];
     for (const offset of [1, -1, 2, -2, 3, -3]) {
       if (index + offset < 0 || index + offset >= stack.slices) continue;
@@ -185,7 +208,12 @@ function changeStack(stage) {
   element(stage, 'spacing').textContent = stack.spacing_mm.join(' × ') + ' mm';
   element(stage, 'uid').textContent = state.views[stage].uid;
   state.display[stage] = {zoom: 1, x: 0, y: 0};
+  state.views[stage].ready = false;
+  state.views[stage].displayedIndex = null;
   if (stage === 'pre') resetMeasurement();
+  if (stage === 'post') editor.setSource({
+    ...stack, case_id: state.case.id, series_uid: state.views.post.uid, stack_index: stack.index,
+  });
   showSlice(stage);
 }
 
@@ -200,6 +228,7 @@ async function loadSeries(stage, epoch) {
   const serial = ++state.requested[stage];
   ++state.imageRequest[stage];
   delete state.views[stage];
+  if (stage === 'post') editor.setSource(null);
   setStudyControls(stage, true);
   element(stage, 'image').hidden = true;
   element(stage, 'meta').textContent = 'Loading acquisition…';
@@ -250,6 +279,7 @@ async function loadCase(id) {
   frames.clear();
   state.views = {};
   state.case = null;
+  editor.setSource(null);
   resetMeasurement();
   $('review').hidden = true;
   $('loading').hidden = false;
@@ -333,6 +363,7 @@ for (const stage of stages) {
   });
   let drag = null;
   viewport.addEventListener('pointerdown', event => {
+    if (stage === 'post' && editor.selecting) return;
     if (state.display[stage].zoom <= 1 || !state.views[stage]?.ready || event.button !== 0) return;
     viewport.focus();
     drag = {x: event.clientX, y: event.clientY, ...{panX: state.display[stage].x, panY: state.display[stage].y}};
@@ -419,6 +450,7 @@ function viewSignature() {
   return JSON.stringify({
     epoch: state.epoch, image: state.imageRequest, measure: state.measureRequest,
     display: state.display, volume: $('volume-value').textContent,
+    candidate: editor.signature,
   });
 }
 $('capture').addEventListener('click', async () => {

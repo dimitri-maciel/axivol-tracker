@@ -12,7 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY hcclab ./hcclab
 COPY web ./web
 COPY tests ./tests
-RUN useradd --system --uid 10001 --no-create-home lab
+RUN useradd --system --uid 10001 --no-create-home lab \
+    && mkdir /annotations && chown lab:lab /annotations
 USER lab
 EXPOSE 8000
 CMD ["python", "-m", "hcclab.server", "--data", "/data", "--host", "0.0.0.0"]
