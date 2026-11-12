@@ -1,27 +1,111 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>HCC-TACE Lab · Visor de investigación</title>
+  <meta name="theme-color" content="#111418">
+  <title>Axivol Tracker — Study comparison</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header class="top"><a class="brand" href="/" aria-label="Inicio HCC-TACE Lab"><span aria-hidden="true">✧</span> HCC-TACE Lab</a><span class="purpose">Investigación · datos locales</span><button id="capture" class="quiet" data-html2canvas-ignore>Preparar imagen</button><a id="image-download" class="quiet" data-html2canvas-ignore download="HCC-TACE_Lab.png" hidden>Descargar PNG</a></header>
-  <main id="workspace">
-    <section class="intro"><div><div class="eyebrow">COMPARACIÓN LONGITUDINAL</div><h1>Revisa ambos estudios.</h1><p>TC antes y después de TACE, con acceso a las máscaras publicadas.</p></div><div class="case-select"><label for="case">Caso</label><select id="case" disabled><option>Cargando casos…</option></select><small id="catalog-status"></small></div></section>
-    <p id="alert" role="status" class="notice" hidden></p>
-    <div id="review" hidden>
-      <section class="viewers" aria-label="Visores de tomografía">
-        <article class="viewer pre" id="pre"><header><div><span class="dot"></span><strong>PRE-TACE</strong><span class="date" id="pre-date"></span></div><span id="pre-meta" class="meta"></span></header><div class="slice"><img id="pre-image" alt="Corte axial del estudio previo a TACE"><span class="marker a">A</span><span class="marker p">P</span><span class="marker r">R</span><span class="marker l">L</span></div><div class="scrub"><button id="pre-prev" aria-label="Corte PRE anterior">‹</button><input id="pre-index" aria-label="Corte PRE" type="range" min="1" max="1" value="1"><button id="pre-next" aria-label="Corte PRE siguiente">›</button><output id="pre-counter"></output></div><div class="slice-detail" id="pre-status" role="status"></div></article>
-        <article class="viewer post" id="post"><header><div><span class="dot"></span><strong>POST-TACE</strong><span class="date" id="post-date"></span></div><span id="post-meta" class="meta"></span></header><div class="slice"><img id="post-image" alt="Corte axial del estudio posterior a TACE"><span class="marker a">A</span><span class="marker p">P</span><span class="marker r">R</span><span class="marker l">L</span></div><div class="scrub"><button id="post-prev" aria-label="Corte POST anterior">‹</button><input id="post-index" aria-label="Corte POST" type="range" min="1" max="1" value="1"><button id="post-next" aria-label="Corte POST siguiente">›</button><output id="post-counter"></output></div><div class="slice-detail" id="post-status" role="status"></div></article>
+  <a class="skip-link" href="#workspace">Skip to workspace</a>
+  <header class="app-header">
+    <a class="brand" href="/?case=HCC_002" aria-label="Axivol Tracker home">
+      <svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><rect x="3" y="3" width="26" height="26" rx="7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M9 22l7-13 7 13M12 17h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Axivol <span class="brand-light">Tracker</span></span>
+    </a>
+    <span class="header-context">CT volumetry</span>
+    <div class="header-actions" data-html2canvas-ignore>
+      <button id="capture" class="button secondary" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="5" width="14" height="11" rx="2"/><path d="M7 5l1-2h4l1 2"/><circle cx="10" cy="10.5" r="3"/></svg>Export image</button>
+      <a id="image-download" class="button secondary" download hidden>Save image</a>
+      <a id="report" class="button secondary" aria-disabled="true" tabindex="-1" download><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9m-3-3l3 3 3-3M4 12v4h12v-4"/></svg>Export report</a>
+    </div>
+  </header>
+  <main id="workspace" tabindex="-1">
+    <h1 class="sr-only">CT study comparison</h1>
+    <section class="study-context" aria-label="Case selection">
+      <div class="case-picker"><label for="case">Case</label><select id="case" disabled><option>Loading…</option></select></div>
+      <span id="catalog-status" class="catalog-status"></span>
+    </section>
+    <div id="alert" class="notice" role="alert" hidden></div>
+    <div id="loading" class="empty-state" role="status">Loading studies…</div>
+    <div id="review" class="review-layout" hidden>
+      <section class="imaging" aria-label="CT images">
+        <div class="image-toolbar">
+          <div class="window-controls" role="group" aria-label="Window and level">
+            <svg class="toolbar-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 3v14" fill="none"/><path d="M10 3a7 7 0 0 1 0 14z" fill="currentColor" stroke="none"/></svg>
+            <label for="width">Window <input id="width" type="number" min="2" max="3000" step="1" value="350"></label>
+            <label for="level">Level <input id="level" type="number" min="-1000" max="3000" step="1" value="50"></label><span class="unit-label">HU</span>
+          </div>
+          <button id="reset-display" class="button text-button">Reset display</button>
+          <label class="toggle-control" for="link"><input id="link" type="checkbox" aria-describedby="link-note">Link scrolling</label>
+        </div>
+        <p id="link-note" class="linked-note" hidden>Relative slice position only. Images are not registered.</p>
+        <div class="viewers">
+          <article class="viewer" id="pre" aria-labelledby="pre-title">
+            <header class="viewer-heading"><div><h2 id="pre-title">Baseline</h2><span class="study-stage">Pre-TACE</span></div><time id="pre-date"></time></header>
+            <div class="slice" id="pre-viewport" tabindex="0" role="group" aria-label="Baseline CT image. Use up and down arrow keys to scroll slices." aria-busy="true">
+              <img id="pre-image" alt="Baseline axial CT" draggable="false" hidden>
+              <span class="frame-message" id="pre-image-state" role="status">Loading image…</span>
+              <span class="marker a"></span><span class="marker p"></span><span class="marker r"></span><span class="marker l"></span>
+              <span id="pre-overlay-label" class="overlay-label" hidden><i></i><span></span></span>
+              <span class="view-label">CT</span>
+            </div>
+            <div class="viewport-tools">
+              <span id="pre-meta" class="acquisition-meta"></span>
+              <div class="zoom-controls" role="group" aria-label="Baseline zoom">
+                <button id="pre-zoom-out" class="icon-button" aria-label="Zoom out baseline">−</button><output id="pre-zoom" aria-label="Baseline zoom level">100%</output><button id="pre-zoom-in" class="icon-button" aria-label="Zoom in baseline">+</button>
+              </div>
+            </div>
+            <div class="scrub"><button id="pre-prev" class="icon-button" aria-label="Previous baseline slice">‹</button><input id="pre-index" aria-label="Baseline slice" type="range" min="1" max="1" value="1"><button id="pre-next" class="icon-button" aria-label="Next baseline slice">›</button><output id="pre-counter"></output></div>
+            <p id="pre-status" class="slice-detail"></p>
+            <details class="study-settings"><summary>Study details</summary><div class="study-fields"><label for="pre-series">Series<select id="pre-series"></select></label><label for="pre-stack">Acquisition<select id="pre-stack"></select></label><dl class="source-details"><dt>Series UID</dt><dd id="pre-uid"></dd><dt>Pixel spacing</dt><dd id="pre-spacing"></dd></dl></div></details>
+          </article>
+          <article class="viewer" id="post" aria-labelledby="post-title">
+            <header class="viewer-heading"><div><h2 id="post-title">Follow-up</h2><span class="study-stage">Post-TACE</span></div><time id="post-date"></time></header>
+            <div class="slice" id="post-viewport" tabindex="0" role="group" aria-label="Follow-up CT image. Use up and down arrow keys to scroll slices." aria-busy="true">
+              <img id="post-image" alt="Follow-up axial CT" draggable="false" hidden>
+              <span class="frame-message" id="post-image-state" role="status">Loading image…</span>
+              <span class="marker a"></span><span class="marker p"></span><span class="marker r"></span><span class="marker l"></span>
+              <span class="view-label">CT</span>
+            </div>
+            <div class="viewport-tools">
+              <span id="post-meta" class="acquisition-meta"></span>
+              <div class="zoom-controls" role="group" aria-label="Follow-up zoom">
+                <button id="post-zoom-out" class="icon-button" aria-label="Zoom out follow-up">−</button><output id="post-zoom" aria-label="Follow-up zoom level">100%</output><button id="post-zoom-in" class="icon-button" aria-label="Zoom in follow-up">+</button>
+              </div>
+            </div>
+            <div class="scrub"><button id="post-prev" class="icon-button" aria-label="Previous follow-up slice">‹</button><input id="post-index" aria-label="Follow-up slice" type="range" min="1" max="1" value="1"><button id="post-next" class="icon-button" aria-label="Next follow-up slice">›</button><output id="post-counter"></output></div>
+            <p id="post-status" class="slice-detail"></p>
+            <details class="study-settings"><summary>Study details</summary><div class="study-fields"><label for="post-series">Series<select id="post-series"></select></label><label for="post-stack">Acquisition<select id="post-stack"></select></label><dl class="source-details"><dt>Series UID</dt><dd id="post-uid"></dd><dt>Pixel spacing</dt><dd id="post-spacing"></dd></dl></div></details>
+          </article>
+        </div>
+        <div class="viewer-help"><span>Click an image to scroll with the mouse or ↑ ↓.</span><span>Drag to pan when zoomed.</span></div>
       </section>
-      <div class="toolbar"><label><input id="show-mask" type="checkbox"> Máscara PRE publicada</label><label><input id="link" type="checkbox"> Vincular recorrido</label><span id="link-note" hidden>Por posición relativa, sin registro anatómico.</span><details id="options"><summary>Series y ajustes</summary><div class="options-grid"><label>Serie PRE<select id="pre-series"></select></label><label>Adquisición PRE<select id="pre-stack"></select></label><label>Serie POST<select id="post-series"></select></label><label>Adquisición POST<select id="post-stack"></select></label><label>Etiqueta SEG<select id="segment"></select></label><label>Ventana <input id="width" type="number" min="2" max="3000" value="350"></label><label>Nivel <input id="level" type="number" min="-1000" max="3000" value="50"></label></div></details></div>
-      <section class="measurement"><div><div class="eyebrow">MÁSCARA PUBLICADA · PRE</div><h2 id="measure-title">Volumen de la máscara</h2><p id="measure-result" role="status">Selecciona una etiqueta y mide en su geometría nativa.</p></div><button id="measure" class="primary">Medir máscara PRE</button></section>
-      <section class="bottom"><div class="status"><span class="signal"></span><div><strong>Comparación pendiente</strong><p>Revisar fase, registro y máscara POST antes de calcular cambios.</p></div></div><a id="report" class="quiet" download>Exportar reporte JSON ↓</a></section>
+      <aside class="analysis-panel" aria-label="Segmentation and measurements">
+        <section class="segmentation-section">
+          <div class="section-heading"><h2>Segmentation</h2><span class="context-tag">Baseline</span></div>
+          <label for="segment" class="field-label">Structure</label><select id="segment"></select>
+          <label class="toggle-control overlay-toggle" for="show-mask"><input id="show-mask" type="checkbox"><span class="swatch"></span>Show overlay</label>
+          <p class="field-hint">Published segmentation from TCIA.</p>
+        </section>
+        <section class="measurement-section" aria-labelledby="measure-title">
+          <h2 id="measure-title">Segmentation volume</h2>
+          <div class="volume-display" aria-live="polite"><span id="volume-value">—</span><span class="volume-unit">cm³</span></div>
+          <p id="measure-result" class="measurement-message" role="status">Select a structure to calculate its volume.</p>
+          <button id="measure" class="button primary" disabled>Calculate volume</button>
+          <dl class="measurement-source"><div><dt>Case</dt><dd id="source-case">—</dd></div><div><dt>Acquisition</dt><dd id="source-acquisition">—</dd></div><div><dt>Segment</dt><dd id="source-segment">—</dd></div><div><dt>Voxels</dt><dd id="source-voxels">—</dd></div></dl>
+          <p class="measure-scope">Native geometry. Volume alone does not establish treatment response.</p>
+        </section>
+        <section class="comparison-section">
+          <div class="section-heading"><h2>Comparison</h2><span class="status-tag">Pending</span></div>
+          <dl class="review-status"><div><dt>Contrast phase</dt><dd>Not verified</dd></div><div><dt>Registration</dt><dd>Pending</dd></div><div><dt>Follow-up segmentation</dt><dd>Unavailable</dd></div></dl>
+          <div class="volume-change"><span>Volume change</span><strong>Not calculated</strong></div>
+        </section>
+      </aside>
     </div>
   </main>
-  <footer>HCC-TACE-Seg · <a href="https://doi.org/10.7937/TCIA.5FNA-0924" target="_blank" rel="noopener noreferrer">The Cancer Imaging Archive</a> · CC BY 4.0 <span>Visor de investigación</span></footer>
+  <footer class="app-footer"><span>HCC-TACE-Seg <a href="https://doi.org/10.7937/TCIA.5FNA-0924" target="_blank" rel="noopener noreferrer">TCIA dataset</a><span class="license">CC BY 4.0</span></span><span>Development build. Not for clinical use.</span></footer>
   <script src="/html2canvas.min.js"></script><script type="module" src="/app.js"></script>
 </body>
 </html>

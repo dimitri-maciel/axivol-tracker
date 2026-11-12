@@ -1,0 +1,48 @@
+{
+  "case": "HCC_002",
+  "acquisition": "1",
+  "segment": {
+    "number": 2,
+    "label": "Mass"
+  },
+  "baseline": {
+    "sequential_ms": [
+      127.9,
+      69.9,
+      78.7,
+      69.5,
+      78.5,
+      70.7
+    ],
+    "repeated_ms": [
+      78.4,
+      69.8,
+      78.1,
+      69.2
+    ],
+    "six_concurrent_ms": [
+      1677.3,
+      1674.2,
+      1643.5,
+      1703.9,
+      1707.1,
+      1662.3
+    ]
+  },
+  "updated": {
+    "warm_server_png_ms": [
+      8.81,
+      2.42,
+      1.88,
+      1.58,
+      1.46
+    ],
+    "browser": {
+      "adjacent_slice_ms": 64,
+      "burst_settle_ms": 142,
+      "burst_requests": 4,
+      "peak_parallel_image_requests": 1
+    }
+  },
+  "method": "Local Docker app. Server timings include reading the full PNG response. Browser timings include Playwright interaction overhead; burst settle starts after 31 range events. Observational measurements, not a clinical performance benchmark."
+}

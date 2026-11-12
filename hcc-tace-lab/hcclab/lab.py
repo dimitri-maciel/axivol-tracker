@@ -25,37 +25,38 @@ class Lab:
     def row(self, uid):
         row = self.catalog.by_uid.get(uid)
         if not row or row['Modality']!='CT' or not self.catalog.local(row):
-            raise KeyError('Serie CT no disponible en el almacenamiento local.')
+            raise KeyError('This CT series is not available. Download the series before opening it.')
         return row
 
     def stack(self, uid, index):
         row = self.row(uid)
         options = stacks(self.catalog.folder(row),uid)
         if not 0<=index<len(options):
-            raise KeyError('Adquisición no encontrada.')
+            raise KeyError('Acquisition not found.')
         return row, options[index]
 
     def series(self, uid):
         row = self.row(uid)
         seg = find_seg(self.catalog,row)
         labels = segment_options(seg[1]) if seg else []
-        return {'uid':uid,'description':row.get('SeriesDescription') or 'Serie sin descripción',
+        return {'uid':uid,'description':row.get('SeriesDescription') or 'Unnamed series',
                 'segments':labels,'default_segment':default_segment(labels),
                 'stacks':[{'index':i,'acquisition':s.slices[0].acquisition,'slices':len(s.slices),
                            'spacing_mm':s.slices[0].spacing,'interval_mm':s.interval_mm,'issue':s.issue,
                            'orientation_labels':orientation_labels(s.slices[0])}
                           for i,s in enumerate(stacks(self.catalog.folder(row),uid))]}
 
+    @lru_cache(maxsize=192)
     def image(self, uid, stack_index, slice_index, level, width, segment=None):
         row, st = self.stack(uid,stack_index)
         if not 0<=slice_index<len(st.slices):
-            raise KeyError('Corte fuera de la adquisición.')
+            raise KeyError('Slice index is outside this acquisition.')
         s = st.slices[slice_index]
         mask = None
         if segment is not None:
             seg = find_seg(self.catalog,row)
             if not seg:
-                raise GeometryError('No hay una máscara publicada para esta serie.')
+                raise GeometryError('No published segmentation is available for this series.')
             mask = frame_mask(*seg,segment,s)
         return render_slice(s,level=level,width=width,mask=mask)
 
@@ -64,16 +65,16 @@ class Lab:
         row, st = self.stack(uid,stack_index)
         seg = find_seg(self.catalog,row)
         if not seg:
-            raise GeometryError('Esta serie no tiene una máscara DICOM SEG publicada.')
+            raise GeometryError('No published DICOM SEG is available for this series.')
         return mask_volume(*seg,segment,st)
 
     def report(self, case_id, pre_uid, pre_stack, post_uid, post_stack, segment=None):
         case = self.catalog.case(case_id)
         if not case['chronological_pair']:
-            raise GeometryError('No se pudo determinar un par cronológico de estudios.')
+            raise GeometryError('A baseline and follow-up pair could not be established.')
         pre, post = case['studies']
         if pre_uid not in {s['uid'] for s in pre['series']} or post_uid not in {s['uid'] for s in post['series']}:
-            raise GeometryError('Las series seleccionadas no pertenecen al par PRE/POST de este caso.')
+            raise GeometryError('The selected series do not belong to this case in baseline and follow-up order.')
         rows = []
         for stage, uid, idx in [('PRE',pre_uid,pre_stack),('POST',post_uid,post_stack)]:
             row, st = self.stack(uid,idx)
@@ -90,6 +91,6 @@ class Lab:
         return {'collection':COLLECTION,'dataset_doi':DOI,'case':case_id,'studies':rows,
                 'pre_segmentation_measurement':measured,'pre_measurement_issue':issue,
                 'post_segmentation_measurement':None,'volume_change_percent':None,
-                'status':'comparacion_pendiente',
-                'pending':['Revisar fases y cobertura','Evaluar registro','Verificar correspondencia y máscara POST'],
-                'scope':'Investigación: una medición de máscara publicada no es respuesta clínica.'}
+                'status':'comparison_pending',
+                'pending':['Review contrast phases and coverage','Evaluate registration','Verify lesion correspondence and follow-up segmentation'],
+                'scope':'Development build: published segmentation volume does not establish treatment response.'}

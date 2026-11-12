@@ -1,4 +1,4 @@
-# Ejecutar HCC-TACE Lab
+# Ejecutar Axivol Tracker
 
 Ejecuta estos comandos desde esta carpeta. Se necesita Docker Desktop y espacio disponible para la colección de 28.57 GB más la extracción temporal. Docker publica el visor en `127.0.0.1:8770` y el contenedor de descarga solo escribe en `data/`.
 
@@ -11,7 +11,11 @@ docker compose run --rm ingest clinical
 docker compose up --build -d app
 ```
 
-Abre [HCC_002](http://127.0.0.1:8770/?case=HCC_002). **Series y ajustes** permite elegir la adquisición dentro de una serie, la etiqueta SEG y ventana/nivel. Los recorridos se vinculan por posición relativa, sin afirmar alineación anatómica. El enlace de reporte descarga JSON con UID, adquisición, espaciado, etiqueta y estado de revisión.
+Abre [HCC_002](http://127.0.0.1:8770/?case=HCC_002). La interfaz está en inglés. **Study details** permite elegir la serie y adquisición de cada visor; **Segmentation** selecciona la estructura y su superposición. **Window** y **Level** ajustan la visualización. **Calculate volume** mide la segmentación seleccionada; **Export report** descarga un JSON con sus referencias.
+
+Haz clic en una imagen para recorrer sus cortes con la rueda o las flechas del teclado. Los botones de zoom permiten ampliar y arrastrar la imagen. **Link scrolling** vincula los recorridos por posición relativa, sin afirmar alineación anatómica. **Reset display** restaura zoom y ventana/nivel. **Export image** descarga una captura PNG.
+
+Las cargas de cortes se agrupan para priorizar la última posición solicitada. Una caché acotada y la precarga de cortes cercanos reducen las esperas. La [guía de interfaz](docs/interface-design.md) documenta los criterios de diseño, accesibilidad y comprobaciones de navegador.
 
 Para toda la colección y comprobación de progreso:
 

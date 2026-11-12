@@ -15,6 +15,7 @@ STATIC = {
     '/':('index.html','text/html; charset=utf-8'),
     '/styles.css':('styles.css','text/css; charset=utf-8'),
     '/app.js':('app.js','text/javascript; charset=utf-8'),
+    '/frame-loader.js':('frame-loader.js','text/javascript; charset=utf-8'),
     '/html2canvas.min.js':('html2canvas.min.js','text/javascript; charset=utf-8'),
 }
 WEB = Path(__file__).resolve().parents[1]/'web'
@@ -27,9 +28,9 @@ def integer(query,key,default,low,high):
     try:
         n = int(raw)
     except (ValueError,TypeError) as e:
-        raise ValueError(f'{key} debe ser un entero.') from e
+        raise ValueError(f'{key} must be an integer.') from e
     if not low<=n<=high:
-        raise ValueError(f'{key} está fuera de rango.')
+        raise ValueError(f'{key} is out of range.')
     return n
 
 
@@ -58,7 +59,7 @@ def handler(lab: Lab):
             try:
                 host = urlsplit('//'+self.headers.get('Host','')).hostname
                 if host not in ('127.0.0.1','localhost','::1'):
-                    return self.json(403,{'error':'El visor solo acepta solicitudes locales.'})
+                    return self.json(403,{'error':'This viewer only accepts local requests.'})
                 self.route(path.path,parse_qs(path.query,max_num_fields=12))
             except (BrokenPipeError,ConnectionResetError):
                 pass  # Scrubbing slices cancels obsolete browser requests.
@@ -68,7 +69,7 @@ def handler(lab: Lab):
                 self.json(422,{'error':str(e)})
             except (AttributeError,OSError,RuntimeError,InvalidDicomError) as e:
                 self.log_error('DICOM read failed: %s',type(e).__name__)
-                self.json(422,{'error':'No se pudo leer esta adquisición o su codificación DICOM.'})
+                self.json(422,{'error':'This acquisition or its DICOM encoding could not be read.'})
 
         def route(self,path,q):
             if path in STATIC:
@@ -89,7 +90,7 @@ def handler(lab: Lab):
                 segment = integer(q,'segment',None,1,65535)
                 if kind=='volume':
                     if segment is None:
-                        raise ValueError('Selecciona una etiqueta SEG.')
+                        raise ValueError('Select a segment.')
                     return self.json(200,lab.measure(uid,stack,segment))
                 n = integer(q,'index',0,0,10000)
                 level = integer(q,'level',50,-1000,3000)
@@ -101,8 +102,8 @@ def handler(lab: Lab):
                                     q.get('post',[''])[0],integer(q,'postStack',0,0,999),
                                     integer(q,'segment',None,1,65535))
                 report['exported_utc'] = datetime.now(timezone.utc).isoformat()
-                return self.json(200,report,Content_Disposition=f'attachment; filename="{case}_reporte.json"')
-            raise KeyError('Ruta no encontrada.')
+                return self.json(200,report,Content_Disposition=f'attachment; filename="{case}_report.json"')
+            raise KeyError('Route not found.')
     return Handler
 
 

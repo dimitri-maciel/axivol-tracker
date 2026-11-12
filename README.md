@@ -11,11 +11,14 @@ Proyecto de titulación de **Dimitri Maciel**, Maestría en Ciencias Computacion
 - [Guion de presentación de cinco minutos](docs/Guion_presentacion_5_minutos.txt).
 - [Instalación, descarga de datos y pruebas](hcc-tace-lab/README.md).
 - [Arquitectura y decisiones de interfaz](hcc-tace-lab/docs/decisiones.md).
+- [Diseño del visor, accesibilidad y navegación](hcc-tace-lab/docs/interface-design.md).
 - [Reporte técnico del caso HCC_002](output/avance_tecnico/reporte_HCC_002.json).
 
 ## Estado actual
 
-El prototipo permite explorar series y adquisiciones de TC, ajustar ventana y nivel, superponer una máscara DICOM SEG publicada y calcular su volumen en la geometría original. Los datos permanecen en el equipo que ejecuta la aplicación.
+La interfaz en inglés permite revisar los estudios Baseline y Follow-up, explorar adquisiciones, ajustar ventana y nivel, ampliar las imágenes y superponer una segmentación DICOM SEG publicada. El volumen se calcula en la geometría original. La navegación prioriza el último corte solicitado y precarga los cortes cercanos. Los datos permanecen en el equipo que ejecuta la aplicación.
+
+La [verificación de la interfaz](output/ui/README.md) incluye pruebas funcionales, accesibilidad automática y tiempos de navegación.
 
 El conjunto descargado en el entorno de desarrollo contiene 105 casos y 677 series. El ejemplo de volumetría corresponde al caso **HCC_002, adquisición PRE 1, etiqueta Mass (segmento 2)**: 324 430 vóxeles, 109 cortes vinculados y **495,04 cm³**. Es una comprobación técnica de lectura y medición de la máscara publicada.
 

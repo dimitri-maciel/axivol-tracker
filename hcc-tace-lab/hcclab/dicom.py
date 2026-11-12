@@ -22,15 +22,15 @@ def stacks(folder: Path, uid: str):
     for path in sorted(folder.glob('*.dcm')):
         ds = dcmread(path, stop_before_pixels=True)
         if ds.Modality!='CT' or str(ds.SeriesInstanceUID)!=uid or int(ds.get('NumberOfFrames',1))!=1:
-            raise GeometryError('La serie no es una pila CT DICOM de un corte por archivo.')
-        s = Slice(path, str(ds.SOPInstanceUID), str(ds.get('AcquisitionNumber','sin número')),
+            raise GeometryError('This series is not a single-frame DICOM CT stack.')
+        s = Slice(path, str(ds.SOPInstanceUID), str(ds.get('AcquisitionNumber','Unspecified')),
                   str(ds.get('FrameOfReferenceUID','')), (int(ds.Rows),int(ds.Columns)), floats(ds.PixelSpacing),
                   floats(ds.ImageOrientationPatient), floats(ds.ImagePositionPatient))
         key = (s.acquisition, s.frame, s.shape, tuple(round(x,5) for x in s.spacing+s.orientation))
         groups[key].append(s)
     result = [build_stack(v) for v in groups.values()]
     if not result:
-        raise GeometryError('No hay cortes CT locales en esta serie.')
+        raise GeometryError('No CT slices are available for this series.')
     return tuple(sorted(result,key=lambda v:(v.issue is not None,-len(v.slices),v.slices[0].acquisition)))
 
 
@@ -38,7 +38,7 @@ def stacks(folder: Path, uid: str):
 def seg_header(path: Path):
     ds = dcmread(path, stop_before_pixels=True)
     if ds.Modality!='SEG' or ds.SegmentationType!='BINARY':
-        raise GeometryError('Solo se admiten máscaras DICOM SEG binarias.')
+        raise GeometryError('Only binary DICOM SEG objects are supported.')
     return ds
 
 
@@ -82,7 +82,7 @@ def references(frame):
 
 def segment_frames(ds, segment: int):
     if segment not in {s['number'] for s in segment_options(ds)}:
-        raise GeometryError('La etiqueta seleccionada no existe en la máscara.')
+        raise GeometryError('The selected segment is not present in the segmentation.')
     return [(i,frame) for i,frame in enumerate(ds.PerFrameFunctionalGroupsSequence)
             if int(frame.SegmentIdentificationSequence[0].ReferencedSegmentNumber)==segment]
 
@@ -90,23 +90,23 @@ def segment_frames(ds, segment: int):
 def frame_mask(path, ds, segment, s):
     frames = [(i,f) for i,f in segment_frames(ds,segment) if s.sop in references(f) and compatible_geometry(ds,f,s)]
     if len(frames)>1:
-        raise GeometryError('La máscara contiene varios marcos para el mismo corte.')
+        raise GeometryError('Multiple segmentation frames reference the same slice.')
     return pixel_array(path,index=frames[0][0]).astype(bool) if frames else None
 
 
 def mask_volume(path, ds, segment: int, stack):
     if stack.interval_mm is None:
-        raise GeometryError(stack.issue or 'No se pudo verificar el espaciado axial.')
+        raise GeometryError(stack.issue or 'Slice spacing could not be verified.')
     by_sop = {s.sop:s for s in stack.slices}
     used = set()
     count = 0
     frames = segment_frames(ds, segment)
     if not frames:
-        raise GeometryError('La etiqueta no tiene marcos.')
+        raise GeometryError('The selected segment has no frames.')
     for idx, frame in frames:
         hits = [by_sop[uid] for uid in references(frame) & by_sop.keys() if compatible_geometry(ds,frame,by_sop[uid])]
         if len(hits)!=1 or hits[0].sop in used:
-            raise GeometryError('No todos los marcos SEG se vinculan de forma única a esta adquisición CT.')
+            raise GeometryError('Segmentation references do not match this acquisition. Select the referenced acquisition.')
         used.add(hits[0].sop)
         count += int(np.count_nonzero(pixel_array(path,index=idx)))
     label = next(s['label'] for s in segment_options(ds) if s['number']==segment)
@@ -114,21 +114,21 @@ def mask_volume(path, ds, segment: int, stack):
             'volume_cm3':native_volume_cm3(count,stack.slices[0].spacing,stack.interval_mm),
             'row_column_spacing_mm':stack.slices[0].spacing,'slice_interval_mm':stack.interval_mm,
             'matched_frames':len(used),'seg_sop_uid':str(ds.SOPInstanceUID),
-            'source':'Máscara binaria publicada por TCIA; medición física de la etiqueta, no de viabilidad.'}
+            'source':'Published TCIA binary segmentation. Physical segment volume; not a measure of viability.'}
 
 
 def render_slice(s, *, level=50, width=350, mask=None):
     ds = dcmread(s.path)
     hu = np.asarray(apply_rescale(pixel_array(ds),ds), dtype=np.float32)
     if hu.shape!=s.shape or not np.isfinite(hu).all():
-        raise GeometryError('Los píxeles no corresponden al tamaño físico del corte.')
+        raise GeometryError('Pixel data does not match the slice dimensions.')
     window = np.rint(np.clip((hu-(level-.5))/(max(width,2)-1)+.5,0,1)*255).astype(np.uint8)
     if str(ds.get('PhotometricInterpretation',''))=='MONOCHROME1':
         window = 255-window
     im = Image.fromarray(window)
     if mask is not None:
         if mask.shape!=window.shape:
-            raise GeometryError('El tamaño de la máscara no coincide con el corte.')
+            raise GeometryError('Segmentation dimensions do not match the slice.')
         rgb = np.repeat(window[...,None],3,axis=2)
         rgb[mask] = np.rint(rgb[mask]*.55 + np.array([50,213,222])*.45).astype(np.uint8)
         im = Image.fromarray(rgb)
