@@ -2,7 +2,7 @@
 
 Aplicación local para explorar tomografías de carcinoma hepatocelular antes y después de TACE, revisar las segmentaciones publicadas y medir su volumen en la geometría original.
 
-La interfaz está en inglés. Incluye dos visores, selección de serie y adquisición, ventana y nivel, zoom, navegación por cortes y exportación de reportes. La máscara PRE permite ajustar contorno y transparencia, y corregir una copia con pincel conservando el original. El editor **Follow-up mask** genera candidatos POST mediante una región, una semilla y límites HU, con revisión visual y exportación de la máscara y su procedencia. El registro entre estudios, las referencias POST expertas y la comparación longitudinal siguen pendientes. El volumen de un candidato no determina viabilidad ni respuesta al tratamiento.
+La interfaz está en inglés. Incluye dos visores, selección de serie y adquisición, ventana y nivel, zoom, navegación por cortes y exportación de reportes. La máscara PRE permite ajustar contorno y transparencia, corregir una copia con pincel y generar un refinamiento automático local del borde conservando el original. El editor **Follow-up mask** genera candidatos POST mediante una región, una semilla y límites HU, con revisión visual y exportación de la máscara y su procedencia. El registro entre estudios, las referencias POST expertas y la comparación longitudinal siguen pendientes. El volumen de un candidato no determina viabilidad ni respuesta al tratamiento.
 
 ## Iniciar
 
@@ -26,6 +26,7 @@ Abre [Axivol Tracker](http://127.0.0.1:8770/?case=HCC_002). La aplicación se si
 - [Arquitectura y decisiones técnicas](hcc-tace-lab/docs/decisiones.md).
 - [Interfaz y verificación en navegador](hcc-tace-lab/docs/interface-design.md).
 - [Revisión y edición de una copia PRE](hcc-tace-lab/docs/pre-mask-review.md).
+- [Refinamiento automático PRE: método, matemáticas y evaluación](hcc-tace-lab/docs/automatic-refinement.md).
 - [Generación de candidatos POST: uso, método y evaluación](hcc-tace-lab/docs/post-segmentation.md).
 - [Matemáticas de la segmentación, geometría y métricas](hcc-tace-lab/docs/post-segmentation-math.md).
 

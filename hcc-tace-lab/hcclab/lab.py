@@ -15,6 +15,7 @@ from .dicom import default_segment, find_seg, frame_mask, mask_volume, reference
 from .geometry import GeometryError, native_volume_cm3
 from .segmentation import grow_region
 from .mask_editing import apply_strokes
+from .refinement import refine_boundary
 from .volume import load_hu_volume
 from .tcia import COLLECTION, DOI
 
@@ -120,6 +121,25 @@ class Lab:
         self.pre_stack(case_id, uid, stack_index)
         return {'candidates': self.candidates.list(case_id, uid, stack_index, source_segment=segment)}
 
+    def _pre_provenance(self, payload, row, stack, seg, source_hashes, seg_hash):
+        """Common source record for manual and automatic PRE candidates."""
+        segment = payload['segment']
+        label = next(item['label'] for item in segment_options(seg[1]) if item['number'] == segment)
+        first = stack.slices[0]
+        return {
+            'schema_version': 1, 'status': 'unreviewed', 'stage': 'PRE',
+            'created_utc': datetime.now(timezone.utc).isoformat(), 'case_id': payload['case_id'],
+            'series_uid': payload['series_uid'], 'stack_index': payload['stack_index'],
+            'acquisition': first.acquisition, 'source_segment': segment, 'source_segment_label': label,
+            'source_seg_sop_uid': str(seg[1].SOPInstanceUID), 'source_seg_sha256': seg_hash,
+            'source': {'collection': COLLECTION, 'dataset_doi': DOI, 'study_uid': row['StudyInstanceUID'],
+                       'frame_of_reference_uid': first.frame, 'stack_identity': stack_identity(stack),
+                       'axis_order': 'z,y,x', 'row_column_spacing_mm': first.spacing,
+                       'slice_interval_mm': stack.interval_mm, 'orientation_patient': first.orientation,
+                       'slices': [{'index': i, 'sop_uid': s.sop, 'position_patient_mm': s.position,
+                                   'sha256': source_hashes[i]} for i, s in enumerate(stack.slices)]},
+        }
+
     def create_pre_edit(self, payload):
         required = {'case_id', 'series_uid', 'stack_index', 'segment', 'strokes'}
         if not isinstance(payload, dict) or set(payload) != required:
@@ -148,14 +168,10 @@ class Lab:
                 raise ValueError('The strokes do not change the published mask. Adjust the correction before saving.')
             if seg_hash != file_sha256(seg[0]) or source_hashes != tuple(file_sha256(s.path) for s in stack.slices):
                 raise GeometryError('Source files changed during editing. Reload the acquisition.')
-            label = next(item['label'] for item in segment_options(seg[1]) if item['number'] == segment)
             first = stack.slices[0]
+            provenance = self._pre_provenance(payload, row, stack, seg, source_hashes, seg_hash)
             metadata = {
-                'schema_version': 1, 'status': 'unreviewed', 'stage': 'PRE',
-                'created_utc': datetime.now(timezone.utc).isoformat(), 'case_id': case_id,
-                'series_uid': uid, 'stack_index': index, 'acquisition': first.acquisition,
-                'label': 'Edited ' + label, 'source_segment': segment, 'source_segment_label': label,
-                'source_seg_sop_uid': str(seg[1].SOPInstanceUID), 'source_seg_sha256': seg_hash,
+                **provenance, 'label': 'Edited ' + provenance['source_segment_label'],
                 'target': 'User-edited copy of a published segment; changes require expert review',
                 'parameters': {'strokes': payload['strokes']}, 'shape_zyx': list(edited.shape),
                 'voxels': diagnostics['voxels'],
@@ -164,17 +180,68 @@ class Lab:
                 'method': {'name': 'manual_brush_edit', 'version': '1.0.0', 'resampling': False,
                            'brush_units': 'mm', 'point_order': 'y,x',
                            'implementation_sha256': {'mask_editing.py': file_sha256(Path(__file__).with_name('mask_editing.py'))}},
-                'source': {'collection': COLLECTION, 'dataset_doi': DOI, 'study_uid': row['StudyInstanceUID'],
-                           'frame_of_reference_uid': first.frame, 'stack_identity': stack_identity(stack),
-                           'axis_order': 'z,y,x', 'row_column_spacing_mm': first.spacing,
-                           'slice_interval_mm': stack.interval_mm, 'orientation_patient': first.orientation,
-                           'slices': [{'index': i, 'sop_uid': s.sop, 'position_patient_mm': s.position,
-                                       'sha256': source_hashes[i]} for i, s in enumerate(stack.slices)]},
                 'software': {name: importlib.metadata.version(name) for name in ('numpy', 'pydicom')},
                 'warnings': ['Edited copy. Changes require expert review. The published mask is preserved.'],
                 'scope': 'Manual PRE correction candidate; not a replacement clinical reference or treatment-response measurement.',
             }
             return self.candidates.save(edited, metadata)
+        finally:
+            self.segmentation_lock.release()
+
+    def create_pre_refinement(self, payload):
+        """Generate a native-grid PRE proposal; never replace its published SEG."""
+        required = {'case_id', 'series_uid', 'stack_index', 'segment', 'band_mm'}
+        if not isinstance(payload, dict) or set(payload) != required:
+            raise ValueError('Provide case_id, series_uid, stack_index, segment and band_mm.')
+        case_id, uid, index, segment = (payload[k] for k in ('case_id', 'series_uid', 'stack_index', 'segment'))
+        if not isinstance(case_id, str) or not isinstance(uid, str) or type(segment) is not int or segment < 1:
+            raise ValueError('Invalid source identifiers or segment number.')
+        band = payload['band_mm']
+        if type(band) not in (int, float) or not 1 <= band <= 5:
+            raise ValueError('Boundary band must be between 1 and 5 mm.')
+        row, stack = self.pre_stack(case_id, uid, index)
+        if stack.interval_mm is None:
+            raise GeometryError('Uniform slice spacing is required for boundary refinement.')
+        seg = find_seg(self.catalog, row)
+        if seg is None:
+            raise GeometryError('No published segmentation is available for this acquisition.')
+        if not self.segmentation_lock.acquire(blocking=False):
+            raise ValueError('A mask operation is running. Wait for it to finish.')
+        started = time.perf_counter()
+        try:
+            source_hashes = tuple(file_sha256(s.path) for s in stack.slices)
+            seg_hash = file_sha256(seg[0])
+            seg = verify_pre_sources(stack, seg, expected_series_uid=uid,
+                                     expected_study_uid=row['StudyInstanceUID'])
+            original = referenced_mask(*seg, segment, stack)
+            hu, valid = self.hu_volume(uid, index, source_hashes)
+            first = stack.slices[0]
+            spacing = (stack.interval_mm, *first.spacing)
+            refined, diagnostics = refine_boundary(hu, original, spacing, band_mm=band, valid_mask=valid)
+            if seg_hash != file_sha256(seg[0]) or source_hashes != tuple(file_sha256(s.path) for s in stack.slices):
+                raise GeometryError('Source files changed during refinement. Reload the acquisition.')
+            provenance = self._pre_provenance(payload, row, stack, seg, source_hashes, seg_hash)
+            warnings = ['Review boundary changes before use.']
+            warnings.extend(w for w in diagnostics.get('warnings', [])
+                            if not w.startswith('Experimental boundary proposal;'))
+            provenance['source']['intensity_units'] = 'HU'
+            provenance['source']['intensity_rule'] = 'Per-slice DICOM rescale; classic CT HU validation and pixel padding exclusion.'
+            metadata = {
+                **provenance, 'label': 'Refined ' + provenance['source_segment_label'],
+                'target': 'Local automatic boundary proposal derived from the published PRE segment',
+                'parameters': {'band_mm': band}, 'shape_zyx': list(refined.shape),
+                'voxels': diagnostics['voxels'], 'original_voxels': int(original.sum()),
+                'volume_cm3': native_volume_cm3(diagnostics['voxels'], first.spacing, stack.interval_mm),
+                'diagnostics': diagnostics,
+                'method': {'name': 'boundary_graph_cut', 'version': '1.0.0', 'resampling': False,
+                           'uses_post_image': False, 'intensity_units': 'HU',
+                           'implementation_sha256': {name: file_sha256(Path(__file__).with_name(name))
+                                                     for name in ('refinement.py', 'volume.py')}},
+                'software': {name: importlib.metadata.version(name) for name in ('numpy', 'scipy', 'pydicom')},
+                'warnings': warnings, 'elapsed_seconds': round(time.perf_counter()-started, 4),
+                'scope': 'Unreviewed PRE boundary refinement. Not a clinical reference or treatment-response measurement.',
+            }
+            return self.candidates.save(refined, metadata)
         finally:
             self.segmentation_lock.release()
 

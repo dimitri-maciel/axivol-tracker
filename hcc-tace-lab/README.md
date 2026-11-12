@@ -23,6 +23,14 @@ Abre **Edit copy** para usar **Paint** o **Erase**, con un radio de pincel en mi
 
 La medición publicada permanece separada de la edición en el reporte (`pre_segmentation_measurement` y `pre_edited_candidate`). Un borde más visible o una corrección manual no demuestran mayor precisión anatómica. Consulta la [guía PRE: significado de Mass, procedimiento, matemáticas y procedencia](docs/pre-mask-review.md).
 
+## Ajustar el borde automáticamente
+
+En **Segmentation**, elige **Boundary band** (1–5 mm, inicialmente 3) y pulsa **Refine boundary**. Se genera una candidata 3D desde el SEG publicado, utilizando las intensidades de esa TC y sus vecinos. Solo puede modificar la franja definida; conserva el núcleo y el exterior. No utiliza la imagen POST ni remuestrea los datos.
+
+El selector **Mask version** permite alternar **Original (published)** y **Refined** en el mismo corte. La ficha muestra los vóxeles añadidos y retirados, los cortes modificados y los parámetros usados. Compara las propuestas con la TC y revisa los avisos. Con contraste insuficiente puede devolver la máscara sin cambios. Todas las salidas son **Unreviewed**; un ajuste no prueba mayor precisión.
+
+Guarda o limpia los trazos manuales antes de refinar. El refinamiento y las nuevas sesiones de pincel parten del original; esta versión todavía no encadena correcciones manuales sobre la candidata refinada. Consulta la [explicación completa del algoritmo, sus límites y la evaluación pendiente](docs/automatic-refinement.md).
+
 ## Generar una máscara POST candidata
 
 Actualiza el contenedor con `docker compose up --build -d app`. Debajo de los visores encontrarás **Follow-up mask**:

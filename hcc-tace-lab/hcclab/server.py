@@ -83,7 +83,9 @@ def handler(lab: Lab):
                 if ((origin is not None and origin != 'http://' + host)
                         or self.headers.get('Sec-Fetch-Site') == 'cross-site'):
                     return self.json(403, {'error': 'Use the local app to create a candidate.'})
-                if self.path not in ('/api/candidates', '/api/pre-edits'):
+                operations = {'/api/candidates': lab.create_candidate, '/api/pre-edits': lab.create_pre_edit,
+                              '/api/pre-refinements': lab.create_pre_refinement}
+                if self.path not in operations:
                     return self.json(404, {'error': 'Route not found.'})
                 if self.headers.get_content_type() != 'application/json':
                     return self.json(415, {'error': 'Send an application/json request.'})
@@ -94,8 +96,7 @@ def handler(lab: Lab):
                 if not 0 < size <= limit:
                     return self.json(413, {'error': f'Parameters must fit in {limit // 1024} KB.'})
                 payload = json.loads(self.rfile.read(size))
-                operation = lab.create_pre_edit if self.path == '/api/pre-edits' else lab.create_candidate
-                return self.json(201, operation(payload))
+                return self.json(201, operations[self.path](payload))
             except (BrokenPipeError, ConnectionResetError):
                 pass
             except KeyError as error:

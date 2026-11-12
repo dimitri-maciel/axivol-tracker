@@ -11,6 +11,7 @@
 | `volume.py` | Carga cuantitativa HU, exclusión de padding y validación de la rejilla CT nativa. |
 | `segmentation.py` | Componente conexa de una semilla dentro de ROI y rango HU, independiente de archivos e interfaz. |
 | `mask_editing.py` | Correcciones manuales sobre una copia binaria, con pincel en milímetros y trazos reproducibles. |
+| `refinement.py` | Ajuste automático PRE en una franja física mediante una energía binaria de intensidad, vecinos y conservación del original. |
 | `candidates.py` | Persistencia inmutable, integridad y exportación de candidatos con procedencia. |
 | `lab.py` | Operaciones de la aplicación compartidas por servidor y pruebas. |
 | `server.py` | Adaptador HTTP para las operaciones y los archivos estáticos. |
@@ -29,6 +30,8 @@ El volumen Docker `annotations` conserva candidatos nuevos en `/annotations`, se
 El primer método POST es crecimiento por umbral con conectividad de seis vecinos, implementado con SciPy. No emplea la máscara PRE, no remuestrea la adquisición ni aprende parámetros de pacientes. Se limita el volumen a 64 millones de vóxeles y la ROI a cuatro millones. Las razones, ecuaciones y limitaciones se explican en la [guía de segmentación](post-segmentation.md).
 
 Las ediciones PRE parten del SEG publicado y usan su rejilla de referencias exactas. Se guardan como candidatos `PRE` separados, con hash del SEG y de las imágenes, segmento fuente, trazos y conteos de cambios. El navegador y el servidor usan la misma distancia física al trazo. El contorno mostrado es interior: no expande ni suaviza la máscara. Los detalles están en la [guía de revisión PRE](pre-mask-review.md).
+
+El refinamiento PRE reutiliza las verificaciones de fuente y el almacenamiento de candidatos, con método `boundary_graph_cut`. Se ejecuta sobre HU nativas; fija las etiquetas fuera de la franja y resuelve un corte mínimo con capacidades enteras acotadas. Una máscara sin cambios también se conserva como resultado explícito, con su motivo. Los parámetros y supuestos se documentan en la [guía del refinamiento automático](automatic-refinement.md). El POST permanece independiente.
 
 ## Medición y procedencia
 

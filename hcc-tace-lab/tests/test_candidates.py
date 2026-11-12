@@ -99,6 +99,7 @@ class CandidateHTTPTests(unittest.TestCase):
         cls.lab = Mock()
         cls.lab.create_candidate.return_value = {'id': 'a' * 32, 'status': 'unreviewed'}
         cls.lab.create_pre_edit.return_value = {'id': 'b' * 32, 'status': 'unreviewed', 'stage': 'PRE'}
+        cls.lab.create_pre_refinement.return_value = {'id': 'c' * 32, 'status': 'unreviewed', 'stage': 'PRE'}
         cls.server = ThreadingHTTPServer(('127.0.0.1', 0), handler(cls.lab))
         cls.thread = Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -112,6 +113,7 @@ class CandidateHTTPTests(unittest.TestCase):
     def request(self, headers, body=b'{}', path='/api/candidates'):
         self.lab.create_candidate.reset_mock()
         self.lab.create_pre_edit.reset_mock()
+        self.lab.create_pre_refinement.reset_mock()
         connection = HTTPConnection('127.0.0.1', self.server.server_port, timeout=5)
         connection.request('POST', path, body, headers)
         response = connection.getresponse()
@@ -160,3 +162,18 @@ class CandidateHTTPTests(unittest.TestCase):
                 self.assertEqual(status, expected)
                 self.lab.create_pre_edit.assert_not_called()
                 self.lab.create_candidate.assert_not_called()
+
+    def test_pre_refinement_uses_bounded_same_origin_json(self):
+        headers = {'Content-Type': 'application/json'}
+        status, document = self.request(headers, b'{"band_mm": 3}', '/api/pre-refinements')
+        self.assertEqual((status, document['stage']), (201, 'PRE'))
+        self.lab.create_pre_refinement.assert_called_once_with({'band_mm': 3})
+        self.lab.create_pre_edit.assert_not_called()
+        for extra, body, expected in [({'Origin': 'https://outside.example'}, b'{}', 403),
+                                      ({'Host': 'outside.example'}, b'{}', 403),
+                                      ({'Content-Type': 'text/plain'}, b'{}', 415),
+                                      ({}, b' ' * 8193, 413)]:
+            with self.subTest(extra=extra, expected=expected):
+                status, _ = self.request(dict(headers, **extra), body, '/api/pre-refinements')
+                self.assertEqual(status, expected)
+                self.lab.create_pre_refinement.assert_not_called()

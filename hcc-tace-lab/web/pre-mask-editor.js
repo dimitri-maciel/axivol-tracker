@@ -1,7 +1,10 @@
-// Human brush edits are replayed against the published PRE mask. Saving creates
-// a separate, unreviewed copy; this module never overwrites source SEG bytes.
+// PRE candidates remain separate from the published source. Manual strokes and
+// automatic boundary refinement both start from that original mask; neither
+// operation overwrites SEG bytes or chains changes onto another candidate.
 const $ = name => document.getElementById('pre-edit-' + name);
 const format = new Intl.NumberFormat('en-US', {maximumFractionDigits: 2});
+const isRefined = item => item?.method?.name === 'boundary_graph_cut';
+const copyName = item => isRefined(item) ? 'Refined copy' : 'Edited copy';
 
 // Pixel indices denote pixel centres. Distance is measured in physical mm,
 // including different row/column spacing. This is also the server's brush rule.
@@ -28,7 +31,7 @@ export function createPreMaskEditor(adapter) {
   const context = canvas.getContext('2d');
   const style = document.getElementById('pre-mask-style'), opacity = document.getElementById('pre-mask-opacity');
   let source = null, active = false, mode = null, strokes = [], drawing = null, saved = [], selected = null;
-  let sourceToken = 0, maskRequest = 0, revision = 0, busy = false, mask = null, maskSlice = null;
+  let sourceToken = 0, maskRequest = 0, revision = 0, busy = false, refining = false, mask = null, maskSlice = null;
   let maskController = null;
   const cache = new Map();
   const identity = item => item && [item.case_id, item.series_uid, item.stack_index, item.source_segment ?? item.segment].join('|');
@@ -38,6 +41,7 @@ export function createPreMaskEditor(adapter) {
     && document.getElementById('show-mask').checked;
   const radius = () => Number($('radius').value);
   const validRadius = () => Number.isFinite(radius()) && radius() >= 1 && radius() <= 20;
+  const validBand = () => $('band').value !== '' && Number($('band').value) >= 1 && Number($('band').value) <= 5;
 
   function message(text = '', error = false) {
     $('message').textContent = text;
@@ -52,7 +56,12 @@ export function createPreMaskEditor(adapter) {
     $('undo').disabled = !strokes.length || busy || !!drawing;
     $('clear').disabled = !strokes.length || busy || !!drawing;
     $('save').disabled = !strokes.length || busy || !!drawing || !hasSource();
-    $('save').textContent = busy ? 'Saving…' : 'Save edited copy';
+    $('save').textContent = busy && !refining ? 'Saving…' : 'Save edited copy';
+    $('refine').disabled = busy || !hasSource() || !adapter.ready() || strokes.length > 0 || !!drawing || !validBand();
+    $('refine').textContent = refining ? 'Refining…' : 'Refine boundary';
+    $('band').disabled = busy;
+    $('refine-hint').textContent = strokes.length || drawing ? 'Save or clear your manual edits before refining.'
+      : 'Creates a separate candidate from the original mask.';
     $('radius').disabled = busy;
     $('saved').disabled = busy || !hasSource();
     $('stop').hidden = !active;
@@ -133,16 +142,33 @@ export function createPreMaskEditor(adapter) {
   }
 
   function renderSaved() {
-    $('saved').replaceChildren(new Option('Published segmentation', ''), ...saved.map(item =>
-      new Option('Edited · ' + format.format(item.volume_cm3) + ' cm³ · ' + item.id.slice(0, 8), item.id)));
+    $('saved').replaceChildren(new Option('Original (published)', ''), ...saved.map(item =>
+      new Option((isRefined(item) ? 'Refined' : 'Edited') + ' · ' + format.format(item.volume_cm3) + ' cm³ · ' + item.id.slice(0, 8), item.id)));
     $('saved').value = selected?.id || '';
     $('result').hidden = !selected;
     $('export').removeAttribute('href');
+    $('difference').hidden = !isRefined(selected);
+    $('warnings').replaceChildren();
+    $('warnings').hidden = true;
     if (selected) {
+      $('state').textContent = copyName(selected) + ' · Unreviewed';
       $('volume').textContent = format.format(selected.volume_cm3);
       $('provenance').textContent = selected.case_id + ' · Acquisition ' + selected.acquisition + ' · '
         + selected.source_segment_label + ' (' + selected.source_segment + ') · ' + format.format(selected.voxels) + ' voxels';
       $('export').href = '/api/candidates/' + encodeURIComponent(selected.id) + '/export';
+      $('export').textContent = isRefined(selected) ? 'Download refined mask' : 'Download edited mask';
+      if (isRefined(selected)) {
+        const diagnostics = selected.diagnostics;
+        $('band-used').textContent = 'Boundary band used: ' + format.format(selected.parameters.band_mm) + ' mm';
+        $('added').textContent = format.format(diagnostics.added_voxels) + ' voxels';
+        $('removed').textContent = format.format(diagnostics.removed_voxels) + ' voxels';
+        $('changed-slices').textContent = diagnostics.changed_slices.length;
+        const warnings = selected.warnings || [];
+        $('warnings').replaceChildren(...warnings.map(text => {
+          const item = document.createElement('li'); item.textContent = text; return item;
+        }));
+        $('warnings').hidden = warnings.length === 0;
+      }
     }
     adapter.changed();
   }
@@ -197,7 +223,7 @@ export function createPreMaskEditor(adapter) {
     maskController?.abort();
     sourceToken++; maskRequest++; revision++;
     source = next; active = false; mode = null; strokes = []; drawing = null;
-    selected = null; saved = []; busy = false; mask = null; maskSlice = null; cache.clear();
+    selected = null; saved = []; busy = false; refining = false; mask = null; maskSlice = null; cache.clear();
     canvas.hidden = true; $('cursor').hidden = true; $('panel').open = false;
     renderSaved(); sync();
     message();
@@ -230,12 +256,14 @@ export function createPreMaskEditor(adapter) {
   $('stop').addEventListener('click', pause);
   $('panel').addEventListener('toggle', () => { if (!$('panel').open && active) pause(); });
   $('radius').addEventListener('input', () => { $('radius').setAttribute('aria-invalid', String(!validRadius())); sync(); });
+  $('band').addEventListener('input', () => { $('band').setAttribute('aria-invalid', String(!validBand())); sync(); });
   $('undo').addEventListener('click', () => { strokes.pop(); revision++; preview(); sync(); message('Last stroke removed.'); });
   $('clear').addEventListener('click', () => { strokes = []; revision++; preview(); sync(); message('Edits cleared. The published mask is unchanged.'); });
   $('saved').addEventListener('change', () => {
     selected = saved.find(item => item.id === $('saved').value) || null;
     strokes = []; revision++; renderSaved(); exit();
-    message(selected ? 'Viewing an unreviewed edited copy. New edits start from the published mask.' : 'Viewing the published segmentation.');
+    message(selected ? 'Viewing an unreviewed ' + (isRefined(selected) ? 'refined' : 'edited')
+      + ' copy. Manual edits start from the published mask.' : 'Viewing the published segmentation.');
   });
   for (const control of [style, opacity]) control.addEventListener('input', () => {
     document.getElementById('pre-mask-opacity-value').textContent = opacity.value + '%';
@@ -294,13 +322,39 @@ export function createPreMaskEditor(adapter) {
     finally { if (epoch === sourceToken) { busy = false; sync(); } }
   });
 
+  $('refine').addEventListener('click', async () => {
+    if (!hasSource() || !adapter.ready() || busy || strokes.length || drawing || !validBand()) return;
+    // Refinement always starts from the immutable published mask. The current
+    // preview and any saved manual copy are not inputs to this operation.
+    selected = null; revision++; renderSaved(); exit();
+    const epoch = sourceToken;
+    const payload = {case_id: source.case_id, series_uid: source.series_uid, stack_index: source.stack_index,
+      segment: source.segment, band_mm: Number($('band').value)};
+    busy = true; refining = true; sync(); message('Refining the original boundary…');
+    try {
+      const response = await fetch('/api/pre-refinements', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'The boundary could not be refined. Try again.');
+      if (epoch !== sourceToken) return;
+      saved = [result, ...saved.filter(item => item.id !== result.id)];
+      selected = result; renderSaved(); adapter.refreshImage();
+      const diagnostics = result.diagnostics;
+      const unchanged = diagnostics.added_voxels + diagnostics.removed_voxels === 0;
+      message(unchanged ? diagnostics.outcome === 'insufficient_contrast'
+        ? 'Not enough contrast to adjust the boundary. No changes were made.'
+        : 'No boundary changes found with this band. The candidate matches the original mask.'
+        : 'Refined copy saved. Compare it with the original across the changed slices.');
+    } catch (error) { if (epoch === sourceToken) message(error.message, true); }
+    finally { if (epoch === sourceToken) { busy = false; refining = false; sync(); } }
+  });
+
   return {
     setSource, sync,
     get editing() { return active; },
     get candidate() { return selected; },
     get signature() { return [revision, active, selected?.id, style.value, opacity.value]; },
     get presentation() { return {style: style.value, opacity: opacity.value}; },
-    get overlayLabel() { return active ? 'Edited copy · Unsaved' : selected ? 'Edited copy · Unreviewed' : 'Published ' + (source?.label || ''); },
+    get overlayLabel() { return active ? 'Edited copy · Unsaved' : selected ? copyName(selected) + ' · Unreviewed' : 'Published ' + (source?.label || ''); },
     frameLoading() { maskController?.abort(); maskRequest++; mask = null; maskSlice = null; drawing = null; canvas.hidden = true; $('cursor').hidden = true; sync(); },
     frameChanged() { if (active) loadMask(); else sync(); },
     overlayChanged() { if (active) { preview(); sync(); } else adapter.refreshImage(); },

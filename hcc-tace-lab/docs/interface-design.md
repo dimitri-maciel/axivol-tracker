@@ -48,6 +48,10 @@ The default overlay combines an inner one-pixel outline with 15% fill. **Outline
 
 `tests/ui_pre_mask.cjs` exercises the real baseline viewport, brush coordinates, mask display, undo, immutable saving, source changes and the separate report fields. Run it against an isolated QA instance with `AXIVOL_URL`; it creates engineering test edits, not clinical annotations.
 
+**Refine boundary** creates a separate PRE proposal using a 1–5 mm **Boundary band** (default 3 mm). Manual drafts block refinement until saved or cleared. The version selector distinguishes **Original (published)**, **Edited** and **Refined**; a refined result reports added/removed voxels and changed slices. Source changes invalidate delayed results. No-change and insufficient-contrast outcomes remain explicit, with no accuracy claim. Refinement starts from the published mask, and brush sessions still start from that original.
+
+`tests/ui_refinement.cjs` tests generation and comparison on an isolated QA app, preserving the original measurement, independent POST state and existing review controls.
+
 ## Verification
 
 Geometry and public-case integration checks, from hcc-tace-lab:
