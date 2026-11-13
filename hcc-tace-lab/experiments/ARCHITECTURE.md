@@ -1,8 +1,8 @@
-# Arquitectura y estado del protocolo POST 2
+# Arquitectura y estado del protocolo POST 2.1
 
-Estado al 12 de noviembre de 2026: implementación `2.0.0`, protocolo `liver_context_local_medsam2`, desplegada localmente. Pasaron 134/134 pruebas integradas y la revisión UI HCC_002 en almacén aislado; la revisión UI HCC_006 también pasó seis comprobaciones. Este documento registra la decisión implementada y sus límites, no una afirmación de exactitud.
+Estado del código al 13 de noviembre de 2026: implementación `2.1.0`, protocolo `liver_context_medsam2_boundary`. **Desplegada y comprobada:** 189/189 pruebas de backend, generación real de HCC_006 y siete grupos de comprobaciones de navegador en HCC_002/HCC_006. Se mantiene pendiente la validación anatómica independiente. Los ensayos de 2.0.0 se conservan abajo como antecedentes; no son una afirmación de exactitud ni de aceptación de esta revisión.
 
-La decisión conserva Efficient MedSAM2 tiny y añade refinamiento rígido con contexto hepático y campo XY local. Los ensayos sugieren que estas variables cambian la deriva y el objeto seguido; también muestran sensibilidad material. No se ha escogido una máscara por parecerse al volumen PRE. HCC_002 y HCC_006 son casos de desarrollo sin referencia POST independiente. Los comparadores nnInteractive y TotalSegmentator se evalúan por separado; no son fallback de la aplicación.
+La revisión conserva registro hepático y contexto XY local, y añade un [refinamiento 3D del borde](../docs/research/post-boundary-refinement.md) guiado por logits y HU POST en una banda fija de 2 mm. No se escoge una máscara por parecerse al volumen PRE ni se corrige una localización equivocada por el mero hecho de reducir energía. HCC_002/HCC_006 siguen siendo casos de desarrollo sin referencia POST independiente. nnInteractive y TotalSegmentator permanecen como comparadores separados.
 
 ## Flujo implementado
 
@@ -10,8 +10,9 @@ La decisión conserva Efficient MedSAM2 tiny y añade refinamiento rígido con c
 2. **Registro global:** estima un Euler3D desde puntos físicos PRE hacia POST, usando imágenes auxiliares de 3 mm. PRE es fixed y POST moving.
 3. **Refinamiento de contexto:** vuelve a optimizar ese Euler3D inicial con `Liver ∪ Mass` PRE como máscara de muestreo de MI. Devuelve una transformación PRE → POST completa, no un incremento que deba componerse de nuevo con la global.
 4. **Localización:** transforma centro y ocho esquinas de la caja `Mass` PRE a POST. Conserva la caja sin margen para el prompt y otra con margen de búsqueda de 10 mm para coherencia. No remuestrea la máscara PRE como salida.
-5. **Adaptador POST:** selecciona un contexto XY físico, infiere con los HU POST y propaga por todos los cortes z. Resta offsets al prompt e inserta las predicciones en los mismos offsets de la retícula nativa POST.
-6. **Controles y persistencia:** excluye padding, comprueba cobertura completa de cortes, borde artificial y coherencia con ROI. Lab vuelve a verificar fuentes, shape, dtype, conteos y corte visible. Solo entonces guarda una candidata `unreviewed`; los reportes clínicos siguen separados.
+5. **Adaptador POST:** infiere en contexto XY físico y propaga por todos los cortes z. Conserva logits nativos de campo; en el corte ancla retiene los logits originales condicionados por la caja, evitando reemplazarlos por puntuaciones fuertes fabricadas al reinyectar la máscara binaria.
+6. **Refinamiento POST:** minimiza una energía de logits y diferencias HU entre seis vecinos dentro de una banda de 2 mm. Mantiene el resto de etiquetas y padding; inserta la máscara final en los offsets nativos. Menor energía no significa mayor exactitud anatómica.
+7. **Controles y persistencia:** comprueba cobertura, bordes artificiales y coherencia con ROI antes y después del ajuste. Una banda editable que toca el borde artificial también se rechaza. Lab vuelve a verificar fuentes, shape, dtype, conteos y corte visible antes de guardar una candidata `unreviewed`; los reportes clínicos siguen separados.
 
 No existe una rama especial por ID de caso. Si falta `Liver`, su etiqueta es ambigua, el refinamiento falla o el modelo se abstiene, se informa el motivo. No se sustituye por otro segmento, una copia PRE, un resultado HU ni un modelo alternativo sin registrar otra ejecución.
 
@@ -33,7 +34,8 @@ La unión evita suponer que `Liver` ya contiene `Mass`. HCC_006 original ilustra
 ## Campo de entrada y salida nativa
 
 ```python
-segment_post_model(post_hu, spacing_zyx, location, *, checkpoint_path, valid_mask=None)
+segment_post_model(post_hu, spacing_zyx, location, *, checkpoint_path, valid_mask=None,
+                   refine_boundary=True, intermediates=None)
     -> (mask_native_post_bool, diagnostics)
 ```
 
@@ -43,7 +45,7 @@ Este adaptador no recibe arrays ni máscara PRE. `hcclab.inference_field.context
 
 Cada eje se convierte con su propio espaciado. El campo se centra y desplaza dentro del FOV, limitado a sus dimensiones, y debe contener la caja localizada. La caja del prompt usa centros inclusivos de píxel; las cajas de almacenamiento son semiabiertas. Se resta `(x0,y0)` antes de invocar el predictor. La entrada se redimensiona a 512×512 y los logits regresan al tamaño nativo del campo antes de umbralizar e insertarse.
 
-Todos los cortes POST se procesan, sin adoptar el rango z PRE. Los ceros fuera del campo XY significan `not_assessed`: no se demostró que esa región sea fondo. Si la máscara válida toca un límite artificial interno del campo, se rechaza con `incomplete_input_field`; el borde físico adquirido solo genera una advertencia de cobertura. No se recorta una máscara ya calculada a la caja PRE para cumplir un guard.
+Todos los cortes POST se procesan, sin adoptar el rango z PRE. Los ceros fuera del campo XY significan `not_assessed`: no se demostró que esa región sea fondo. Si la máscara válida toca un límite artificial interno del campo, se rechaza con `incomplete_input_field`; si lo toca su banda editable, con `incomplete_boundary_context`. El borde físico adquirido se registra aparte. No se recorta la salida a la caja PRE para cumplir un guard. `refine_boundary=False` es un comparador explícito; no es una salida de respaldo si falla el refinamiento.
 
 Tras excluir padding, si más del 50 % del foreground está fuera de la ROI de búsqueda se rechaza con `localization_propagation_mismatch`. Pasar el control no verifica anatomía: el piloto `local240` de HCC_006 muestra por qué. Se mantienen la regla, su origen en desarrollo y sus limitaciones explícitos.
 
@@ -52,12 +54,12 @@ Tras excluir padding, si más del 50 % del foreground está fuera de la ROI de b
 - `registration` conserva el refinamiento final y `global_registration`, parámetros iniciales/finales, centro, dirección física, muestras, configuración y motivo de parada.
 - `registration.context_segments` y `baseline_source.registration_context_segments` guardan números y etiquetas de `Mass` y `Liver`. Ambos comparten el SOP/hash del SEG original; no se inventan dos archivos fuente.
 - La localización conserva centro, caja sin margen, ROI expandida, esquinas transformadas y caras de margen limitadas por el FOV.
-- `segmentation.model` registra código, revisión, pesos y configuración verificados; los diagnósticos incluyen caja nativa/local, campo evaluado, retícula, preparación, controles y versiones.
-- `method` registra versión `2.0.0`, protocolo `liver_context_local_medsam2` y hashes de registro, orquestador, adaptador, campo de inferencia, assets y carga HU. Las fuentes CT y SEG se verifican nuevamente antes de guardar.
+- `segmentation.model` registra pesos/configuración; `raw_prediction` conserva conteo y hashes de máscara/logits previos, mientras `boundary_refinement` registra banda, añadidos/retirados, energía y distancias de cambio. El conteo final sigue en `segmentation.voxels`. Los logits no son confianza calibrada.
+- `method` registra versión `2.1.0`, protocolo `liver_context_medsam2_boundary` y hashes de registro, orquestador, adaptador, campo, assets, carga HU y ahora `post_boundary.py` y `refinement.py`. Las fuentes CT/SEG se verifican nuevamente antes de guardar; las candidatas antiguas conservan versión y bytes.
 
 Una abstención nueva permite exportar un diagnóstico sin crear candidata ni volumen sustitutos. No borra una candidata anterior. La máscara histórica fallida HCC_006 permanece con sus metadatos y nota de revisión en almacenamiento local de auditoría separado de la lista activa. Los DICOM originales siguen en solo lectura. Ninguno de estos artefactos médicos debe añadirse a Git ni al contexto de construcción.
 
-## Comprobaciones realizadas y pendientes
+## Comprobaciones históricas de 2.0.0
 
 Las pruebas dirigidas de registro/experimentos pasaron 21/21 en Docker; cubren ejes físicos rotados, desplazamiento conocido, repetibilidad, padding, contexto inválido, no mutación y reemplazo del SEG durante lectura. La prueba sintética de refinamiento recuperó un desplazamiento LPS conocido de `(4,6,2)` mm con error de 0.3662 mm en el punto objetivo; no mide el registro real de HCC_006.
 
@@ -69,8 +71,8 @@ La suite completa `HCC_PILOT_TEST=1` terminó con 134/134 pruebas aprobadas en 1
 
 ## Comparadores y reproducción
 
-La revisión UI HCC_006 terminó con seis comprobaciones aprobadas y candidata `unreviewed` de 11172 vóxeles (PRE adquisición 3, POST adquisición 1, Mass 2 y Liver 1). Tiempos: 51.651 s de UI, 50.2888 s de operación backend y 48.474 s de inferencia; navegación PRE/POST 58/67 ms. La auditoría posterior no modificó la máscara y confirmó retícula/fuentes, padding y bordes. La comparación anatómica entre modelos se autorizó solo por igualdad exacta de hashes CT ordenados y geometría; no constituye GT ni validez clínica. Los detalles están en [ABLATION.md](ABLATION.md).
+La revisión UI **2.0.0** de HCC_006 terminó con seis comprobaciones y candidata `unreviewed` de 11172 vóxeles (PRE adquisición 3, POST adquisición 1, Mass 2 y Liver 1). La auditoría no modificó esa máscara; su comparación anatómica entre modelos exigió hashes CT y retícula idénticos y no constituye GT. Los tiempos y detalles históricos están en [ABLATION.md](ABLATION.md).
 
-El [runner reproducible](README.md) recibe casos/adquisiciones/segmentos explícitos y vuelve a calcular el registro desde las fuentes. El [índice de investigación](../docs/research/README.md), las [matemáticas](../docs/research/post-mathematics.md) y la [evidencia de modelos](../docs/research/post-tace-models.md) documentan alternativas y requisitos de evaluación.
+Los [runners reproducibles](README.md) recalculan el registro desde fuentes explícitas. `post_tracking` conserva las ablaciones históricas; `post_boundary` guarda raw, logits de campo y refinamientos independientes de 1/2/3 mm, con 2 mm fijada como principal. No selecciona una banda por sus resultados ni escribe candidatas. El [índice de investigación](../docs/research/README.md) enlaza matemáticas, evidencia y evaluación pendiente.
 
-Un modelo autónomo de lesiones hepáticas, si se adopta posteriormente, debe segmentar POST sin máscara PRE y separar esa salida de la identificación longitudinal del objetivo. Si hay varios objetos, no deben sumarse sus volúmenes ni recortarse a la caja PRE para fabricar correspondencia. Ausencia, ambigüedad y varias componentes requieren estados explícitos y revisión. Esta posibilidad no forma parte del protocolo 2 implementado aquí.
+Un modelo autónomo de lesiones hepáticas, si se adopta posteriormente, debe separar segmentación POST e identificación longitudinal. No deben sumarse objetos ni recortarse a la caja PRE para fabricar correspondencia. Esta posibilidad no forma parte de 2.1.0.

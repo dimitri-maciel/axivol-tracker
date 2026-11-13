@@ -77,6 +77,7 @@ class PostModelTests(unittest.TestCase):
                          'roi_zyx': [[1,0,0],[6,8,10]]}
 
     def run_model(self, predictor, **kwargs):
+        kwargs.setdefault('refine_boundary', False)
         fake_torch = SimpleNamespace(__version__='test', inference_mode=nullcontext)
         with patch('hcclab.post_model._get_predictor', return_value=(predictor, fake_torch, {'checkpoint':'test'})), \
              patch('hcclab.post_model.version', return_value='test'):
@@ -95,6 +96,71 @@ class PostModelTests(unittest.TestCase):
         self.assertEqual(info['status'], 'candidate_unreviewed')
         self.assertEqual(info['localization_consistency']['outside_voxels'], 8)
         self.assertFalse(info['localization_consistency']['mask_clipped_to_region'])
+
+    def test_original_anchor_scores_and_field_artifacts_are_preserved(self):
+        class AnchorPredictor(Predictor):
+            def add_new_points_or_box(self, state, **kwargs):
+                index, ids, logits = super().add_new_points_or_box(state, **kwargs)
+                logits[0].array *= .25
+                return index, ids, logits
+
+        captured = {}
+        mask, info = self.run_model(AnchorPredictor(), intermediates=captured)
+        np.testing.assert_array_equal(captured['raw_mask'], mask)
+        np.testing.assert_array_equal(captured['logits'][3], np.where(mask[3], .25, -.25))
+        np.testing.assert_array_equal(captured['logits'][2], np.where(mask[2], 1, -1))
+        self.assertEqual(captured['logits'].dtype, np.float32)
+        self.assertEqual(info['raw_prediction']['anchor_scores'], 'original_box_conditioned_logits')
+        captured['raw_mask'][:] = False
+        self.assertTrue(mask.any())
+
+    def test_refinement_uses_only_inferred_field_and_records_its_changes(self):
+        self.crop_fixture()
+        artifacts = {}
+        valid = np.ones(self.hu.shape, bool)
+
+        def refine(hu, raw, scores, spacing, *, valid_mask):
+            np.testing.assert_array_equal(hu, self.hu[:,50:210,115:195])
+            np.testing.assert_array_equal(raw, (scores > 0) & valid_mask)
+            np.testing.assert_array_equal(valid_mask, valid[:,50:210,115:195])
+            self.assertEqual(spacing, [2.5,1,2])
+            proposal = raw.copy(); proposal[:,3,4] = False
+            return proposal, {'outcome': 'refined', 'removed_voxels': 7}
+
+        with patch('hcclab.post_boundary.refine_post_boundary', side_effect=refine) as cut:
+            mask, info = self.run_crop_model(FieldPredictor(), valid_mask=valid,
+                                             refine_boundary=True, intermediates=artifacts)
+        cut.assert_called_once()
+        self.assertEqual(info['voxels'], 21)
+        self.assertEqual(info['raw_prediction']['voxels'], 28)
+        self.assertEqual(artifacts['raw_mask'].sum(), 28)
+        self.assertFalse(mask[:,53,119].any())
+        self.assertEqual(info['boundary_refinement']['removed_voxels'], 7)
+        json.dumps(info, allow_nan=False)
+
+    def test_refinement_failure_is_explicit_without_silent_raw_fallback(self):
+        with patch('hcclab.post_boundary.refine_post_boundary', side_effect=ValueError('Invalid synthetic scores.')):
+            with self.assertRaises(ModelSegmentationError) as caught:
+                self.run_model(Predictor(), refine_boundary=True)
+        self.assertEqual(caught.exception.diagnostics['reason'], 'boundary_refinement_failed')
+        self.assertEqual(caught.exception.diagnostics['boundary_refinement']['status'], 'failed')
+        self.assertTrue(self.run_model(Predictor())[0].any())
+
+    def test_empty_refinement_abstains_before_localization_fraction(self):
+        with patch('hcclab.post_boundary.refine_post_boundary', return_value=(
+                np.zeros_like(self.hu, dtype=bool), {'outcome': 'refined'})):
+            with self.assertRaises(ModelSegmentationError) as caught:
+                self.run_model(Predictor(), refine_boundary=True)
+        self.assertEqual(caught.exception.diagnostics['reason'], 'empty_refinement')
+
+    def test_refinement_band_needs_complete_artificial_field_context(self):
+        self.crop_fixture()
+        def edge_band(hu, raw, scores, spacing, **kwargs):
+            return raw.copy(), {'editable_band_touch_faces': ['y_min'], 'outcome': 'unchanged'}
+        with patch('hcclab.post_boundary.refine_post_boundary', side_effect=edge_band):
+            with self.assertRaises(ModelSegmentationError) as caught:
+                self.run_crop_model(FieldPredictor(), refine_boundary=True)
+        self.assertEqual(caught.exception.diagnostics['reason'], 'incomplete_boundary_context')
 
     def test_majority_outside_search_region_abstains_without_trimming_or_lock_leak(self):
         self.location['roi_zyx'] = [[2,1,2],[5,6,8]]
@@ -176,6 +242,7 @@ class PostModelTests(unittest.TestCase):
                          'roi_zyx': [[0,0,0],[7,220,260]]}
 
     def run_crop_model(self, predictor, **kwargs):
+        kwargs.setdefault('refine_boundary', False)
         fake_torch = SimpleNamespace(__version__='test', inference_mode=nullcontext)
         with patch('hcclab.post_model._get_predictor', return_value=(predictor, fake_torch, {'checkpoint':'test'})), \
              patch('hcclab.post_model.version', return_value='test'):

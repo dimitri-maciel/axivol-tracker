@@ -1,5 +1,7 @@
 # Ablación de seguimiento POST: HCC_006 y control HCC_002
 
+**Ampliación, 13 de noviembre:** el [experimento de refinamiento de borde](../docs/research/post-boundary-refinement.md) conserva logits POST y compara bandas físicas de 1, 2 y 3 mm desde una misma inferencia por caso. La banda principal de 2 mm modifica 406 vóxeles en HCC_006 y 8050 en HCC_002. Son cambios respecto a cada predicción inicial, no errores frente a una referencia. Los resultados siguientes pertenecen a las variantes históricas de localización y contexto; no deben mezclarse con esas nuevas pasadas.
+
 Fecha de ejecución: 12 de noviembre de 2026. Objetivo: investigar una deriva observada del seguimiento automático, no demostrar exactitud de segmentación. **No hay referencia POST independiente.** HCC_006 y HCC_002 son casos de desarrollo; los parámetros se exploraron tras observar un fallo y no constituyen evaluación externa.
 
 Fuentes: colección pública HCC-TACE-Seg; HCC_006 PRE adquisición 3, POST adquisición 1, `Mass` segmento 2; HCC_002 PRE adquisición 1, POST adquisición 1, `Mass` segmento 2. El refinamiento hepático de HCC_006 usa además `Liver` segmento 1 únicamente para registro. El manifiesto técnico permite recuperar las series exactas desde CT/SEG originales.

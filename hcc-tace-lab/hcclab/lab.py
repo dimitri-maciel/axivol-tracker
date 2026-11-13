@@ -413,7 +413,7 @@ class Lab:
                     'software': {name: importlib.metadata.version(name) for name in
                                  ('numpy', 'scipy', 'pydicom', 'SimpleITK', 'torch', 'torchvision', 'MedSAM2', 'hydra-core')},
                     'implementation_sha256': {name: file_sha256(Path(__file__).with_name(name))
-                                              for name in ('registration.py', 'post_automatic.py', 'post_model.py', 'inference_field.py', 'model_assets.py', 'volume.py')},
+                                              for name in ('registration.py', 'post_automatic.py', 'post_model.py', 'post_boundary.py', 'refinement.py', 'inference_field.py', 'model_assets.py', 'volume.py')},
                     'elapsed_seconds': round(time.perf_counter() - started, 4),
                 }
                 raise
@@ -447,8 +447,8 @@ class Lab:
                 'baseline_source': baseline, 'shape_zyx': list(mask.shape), 'voxels': voxels,
                 'volume_cm3': native_volume_cm3(voxels, first.spacing, stack.interval_mm),
                 'diagnostics': diagnostics,
-                'method': {'name': 'registered_post_segmentation', 'version': '2.0.0',
-                           'protocol': 'liver_context_local_medsam2',
+                'method': {'name': 'registered_post_segmentation', 'version': '2.1.0',
+                           'protocol': 'liver_context_medsam2_boundary',
                            'native_output_grid': True, 'registration_working_grid_resampled': True,
                            'model_input_shape_yx': [512, 512],
                            'model_input_resized': result['model_input_resized'],
@@ -457,7 +457,7 @@ class Lab:
                            'uses_pre_mask': 'localization_only', 'mask_intensities': 'native_POST_HU',
                            'padding_excluded': True,
                            'implementation_sha256': {name: file_sha256(Path(__file__).with_name(name))
-                                                     for name in ('registration.py', 'post_automatic.py', 'post_model.py', 'inference_field.py', 'model_assets.py', 'volume.py')}},
+                                                     for name in ('registration.py', 'post_automatic.py', 'post_model.py', 'post_boundary.py', 'refinement.py', 'inference_field.py', 'model_assets.py', 'volume.py')}},
                 'source': {'collection': COLLECTION, 'dataset_doi': DOI,
                            'study_uid': row['StudyInstanceUID'], 'frame_of_reference_uid': first.frame,
                            'stack_identity': stack_identity(stack), 'axis_order': 'z,y,x',

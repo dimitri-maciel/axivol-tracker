@@ -7,6 +7,7 @@ Torch y el predictor se cargan únicamente al generar una candidata, nunca al
 navegar imágenes. Código y checkpoint están fijados en model_assets.py.
 """
 from importlib.metadata import version
+import hashlib
 from pathlib import Path
 import threading
 import time
@@ -154,19 +155,35 @@ def _get_predictor(checkpoint_path):
     return _PREDICTOR, _TORCH, metadata
 
 
-def _mask_from_logits(logits, native_shape, diagnostics):
+def _scores_from_logits(logits, native_shape, diagnostics):
     values = logits[0].squeeze(0).detach().cpu().numpy()
     if values.shape != native_shape or not np.isfinite(values).all():
         _fail('The model returned incompatible POST mask geometry.', 'invalid_model_output', diagnostics)
-    return values > 0  # Umbral upstream: sigmoid(logit)>0.5.
+    return values.astype(np.float32, copy=True)
 
 
-def segment_post_model(post_hu, spacing_zyx, location, *, checkpoint_path, valid_mask=None):
+def _field_contacts(mask, low, high):
+    return [name for name, internal, plane in (
+        ('y_min', low[0] > 0, mask[:, low[0], low[1]:high[1]]),
+        ('y_max', high[0] < mask.shape[1], mask[:, high[0]-1, low[1]:high[1]]),
+        ('x_min', low[1] > 0, mask[:, low[0]:high[0], low[1]]),
+        ('x_max', high[1] < mask.shape[2], mask[:, low[0]:high[0], high[1]-1]))
+        if internal and plane.any()]
+
+
+def segment_post_model(post_hu, spacing_zyx, location, *, checkpoint_path, valid_mask=None,
+                       refine_boundary=True, intermediates=None):
     """Devuelve máscara bool nativa y diagnóstico; nunca recibe píxeles/SEG PRE.
 
 Los controles aquí verifican ejecución, geometría, cobertura y coherencia espacial, no exactitud
 anatómica. La candidata sigue unreviewed aunque todos estos controles pasen.
+
+``intermediates`` permite al CLI experimental conservar logits y máscara cruda
+del campo realmente inferido. No contiene puntuaciones ficticias fuera de él.
+``refine_boundary=False`` es el comparador explícito, no una salida de respaldo.
 """
+    if type(refine_boundary) is not bool or (intermediates is not None and not isinstance(intermediates, dict)):
+        raise ValueError('Provide a boolean refinement flag and an optional artifacts dictionary.')
     started = time.perf_counter()
     diagnostics = {'method': 'efficient_medsam2_tiny', 'status': 'evaluating',
                    'source_intensities': 'POST_native_HU', 'source_mask_usage': 'localization_only',
@@ -177,7 +194,8 @@ anatómica. La candidata sigue unreviewed aunque todos estos controles pasen.
                                 'normalization_mean': [.485, .456, .406],
                                 'normalization_std': [.229, .224, .225],
                                 'input_resize': 'bilinear_align_corners_false_if_needed',
-                                'output_grid': 'native_POST', 'output_threshold_logit': 0,
+                                'output_grid': 'native_POST', 'initial_threshold_logit': 0,
+                                'output_rule': 'post_native_logit_band_graph_cut' if refine_boundary else 'logit_gt_zero',
                                 'propagation': 'all_POST_slices_bidirectional',
                                 'context_minimum_mm': MIN_CONTEXT_MM,
                                 'context_rule': 'max(160 mm, 2 * largest localized XY box side in mm)',
@@ -218,11 +236,13 @@ anatómica. La candidata sigue unreviewed aunque todos estos controles pasen.
                                    'hydra-core': version('hydra-core'), 'numpy': np.__version__}
         frames = _NativeFrames(post_hu[field], None if valid_mask is None else valid_mask[field], torch)
         mask = np.zeros(post_hu.shape, dtype=bool)
+        scores = np.empty((len(post_hu), *field_shape), dtype=np.float32)
         seen = np.zeros(len(post_hu), dtype=bool)
         with torch.inference_mode():
             state = predictor.init_state(frames, *field_shape)
             _, _, logits = predictor.add_new_points_or_box(state, frame_idx=z, obj_id=1, box=box)
-            prompt = _mask_from_logits(logits, field_shape, diagnostics)
+            prompt_scores = _scores_from_logits(logits, field_shape, diagnostics)
+            prompt = prompt_scores > 0
             if not prompt.any():
                 _fail('The model could not identify a region at the registered location.', 'empty_prompt', diagnostics)
             for reverse in (False, True):
@@ -235,10 +255,15 @@ anatómica. La candidata sigue unreviewed aunque todos estos controles pasen.
                         _fail('POST prediction exceeded its execution time limit.', 'time_limit', diagnostics)
                     if not isinstance(index, int) or not 0 <= index < len(post_hu):
                         _fail('The model returned an invalid POST slice.', 'invalid_model_output', diagnostics)
-                    mask[index, low[0]:high[0], low[1]:high[1]] = _mask_from_logits(logits, field_shape, diagnostics)
+                    values = _scores_from_logits(logits, field_shape, diagnostics)
+                    # add_new_mask can manufacture strong anchor scores from a
+                    # binary prompt. Keep the original box-conditioned evidence
+                    # at that slice, in both propagation directions.
+                    scores[index] = prompt_scores if index == z else values
                     seen[index] = True
         if not seen.all():
             _fail('The model did not process every POST slice.', 'incomplete_propagation', diagnostics)
+        mask[field] = scores > 0
         excluded = int(np.count_nonzero(mask & ~valid_mask)) if valid_mask is not None else 0
         if valid_mask is not None:
             mask &= valid_mask
@@ -247,17 +272,48 @@ anatómica. La candidata sigue unreviewed aunque todos estos controles pasen.
             _fail('The model produced no valid POST region.', 'empty_prediction', diagnostics)
         # A crop boundary is an artificial field limit. Never silently present
         # a prediction truncated there as a complete treated-lesion candidate.
-        contacts = [name for name, internal, plane in (
-            ('y_min', low[0] > 0, mask[:, low[0], low[1]:high[1]]),
-            ('y_max', high[0] < post_hu.shape[1], mask[:, high[0]-1, low[1]:high[1]]),
-            ('x_min', low[1] > 0, mask[:, low[0]:high[0], low[1]]),
-            ('x_max', high[1] < post_hu.shape[2], mask[:, low[0]:high[0], high[1]-1]))
-            if internal and plane.any()]
+        contacts = _field_contacts(mask, low, high)
         diagnostics['internal_field_touch_faces'] = contacts
         if contacts:
             _fail('Prediction reaches the input field boundary. A larger field must be evaluated.',
                   'incomplete_input_field', diagnostics)
         _check_localization_consistency(mask, roi, diagnostics)
+        diagnostics['raw_prediction'] = {
+            'voxels': count, 'mask_array_sha256': hashlib.sha256(mask.tobytes(order='C')).hexdigest(),
+            'logits_field_sha256': hashlib.sha256(scores.astype('<f4').tobytes(order='C')).hexdigest(),
+            'logits_dtype': 'float32_little_endian', 'logits_axis_order': 'z,y,x',
+            'anchor_scores': 'original_box_conditioned_logits',
+            'scope': 'Uncalibrated model scores, not anatomical confidence.'}
+        if intermediates is not None:
+            intermediates.update(raw_mask=mask[field].copy(), logits=scores.copy())
+        if refine_boundary:
+            from .post_boundary import refine_post_boundary
+            try:
+                refined, boundary_info = refine_post_boundary(
+                    post_hu[field], mask[field], scores, spacing_zyx,
+                    valid_mask=None if valid_mask is None else valid_mask[field])
+            except ValueError as error:
+                diagnostics['boundary_refinement'] = {'status': 'failed', 'reason': str(error)}
+                _fail('POST boundary refinement could not finish. Review its diagnostics.',
+                      'boundary_refinement_failed', diagnostics)
+            mask[field] = refined
+            diagnostics['boundary_refinement'] = boundary_info
+            internal_faces = {name for name, internal in (
+                ('y_min', low[0] > 0), ('y_max', high[0] < post_hu.shape[1]),
+                ('x_min', low[1] > 0), ('x_max', high[1] < post_hu.shape[2])) if internal}
+            if internal_faces.intersection(boundary_info.get('editable_band_touch_faces', [])):
+                _fail('The boundary band reaches an artificial input-field edge. Evaluate a larger field.',
+                      'incomplete_boundary_context', diagnostics)
+            contacts = _field_contacts(mask, low, high)
+            diagnostics['internal_field_touch_faces'] = contacts
+            if contacts:
+                _fail('Refined prediction reaches the input field boundary.', 'incomplete_input_field', diagnostics)
+            count = int(np.count_nonzero(mask))
+            if not count:
+                _fail('POST boundary refinement produced an empty mask.', 'empty_refinement', diagnostics)
+            _check_localization_consistency(mask, roi, diagnostics)
+        else:
+            diagnostics['boundary_refinement'] = {'status': 'disabled_for_comparison'}
         edge_faces = [name for name, plane in (
             ('z_min', mask[0]), ('z_max', mask[-1]), ('y_min', mask[:, 0]),
             ('y_max', mask[:, -1]), ('x_min', mask[:, :, 0]), ('x_max', mask[:, :, -1])) if plane.any()]

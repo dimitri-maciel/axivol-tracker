@@ -9,6 +9,7 @@ Este espacio explica cómo investigar la delimitación de una lesión después d
 | 1 | [Guía matemática](post-mathematics.md) | ¿Cómo pasan los píxeles DICOM a coordenadas, una localización POST y un volumen? |
 | 2 | [Evidencia y decisiones](post-tace-evidence.md) | ¿Qué tejido queremos delimitar, qué métodos ayudan y dónde falla la evidencia disponible? |
 | 3 | [Resultados de desarrollo](../../experiments/ABLATION.md) | ¿Qué ocurrió con HCC_006 y el control HCC_002 al cambiar contexto, ventana y registro? |
+| 3a | [Refinamiento del borde POST](post-boundary-refinement.md) | ¿Cómo cambia la máscara con logits, HU y una banda física de 2 mm, y qué sigue sin comprobarse? |
 | 4 | [Reproducir los experimentos](../../experiments/README.md) | ¿Cómo ejecutar el CLI y leer su manifiesto, máscaras y diagnósticos? |
 | 5 | [Modelos y comparadores](post-tace-models.md) | ¿Qué aportaron nnInteractive y TotalSegmentator y cuáles son sus costes y límites? |
 | 6 | [Referencia y validación](post-tace-validation.md) | ¿Cómo conseguir anotaciones independientes y evaluar sin contaminar la prueba? |
@@ -19,17 +20,17 @@ Para explicar el proyecto oralmente, conviene empezar por el objetivo de la lesi
 
 ## Aplicación, experimentos y validación
 
-Estado al redactar este índice, 12 de noviembre de 2026:
+Estado del código al 13 de noviembre de 2026: `2.1.0`, protocolo `liver_context_medsam2_boundary`. **Desplegada y comprobada:** 189/189 pruebas de backend y revisión de ambos visores en HCC_002/HCC_006. La validación anatómica independiente permanece pendiente.
 
 | Estado | Contenido | Documento de referencia |
 | --- | --- | --- |
-| Aplicación desplegada localmente, protocolo 2.0.0 | Registro rígido global → refinamiento con `Liver ∪ Mass` originales PRE → localización de `Mass` → EfficientMedSAM2 tiny sobre un campo XY POST con mínimo solicitado de 160 mm, ajustado a la imagen disponible. Procesa todos los cortes z, aplica controles de rechazo y conserva salida `unreviewed`. | [Método automático implementado](../automatic-post-segmentation.md). |
+| Implementación actual, 2.1.0 | Registro global → contexto `Liver ∪ Mass` PRE → localización → Efficient MedSAM2 tiny en contexto XY local, todos los cortes z → corte de grafo 3D sobre logits POST, banda de 2 mm. Conserva salida `unreviewed`, conteos previos/finales y controles de rechazo. | [Método automático](../automatic-post-segmentation.md) y [refinamiento](post-boundary-refinement.md). |
 | Baseline semiautomático | Semilla POST, región, intervalo HU y conectividad. Tiene matemáticas y supuestos propios. | [Guía](../post-segmentation.md) y [matemáticas del crecimiento](../post-segmentation-math.md). |
-| Experimentos separados | Campo completo, otros contextos/ventanas y comparadores 3D. El refinamiento y cálculo de campo comparten helpers con la app; las salidas de investigación se guardan aparte. nnInteractive y TotalSegmentator no son un fallback de la aplicación. | [Runner](../../experiments/README.md), [ablaciones](../../experiments/ABLATION.md) y [comparadores](post-tace-models.md). |
+| Experimentos separados | Contextos/ventanas, comparadores 3D y sensibilidad de borde con bandas fijas de 1/2/3 mm a partir de una sola inferencia. Las salidas se guardan aparte; no se elige automáticamente una banda ganadora ni un modelo sustituto. | [Runners](../../experiments/README.md), [ablaciones históricas](../../experiments/ABLATION.md) y [comparadores](post-tace-models.md). |
 | Arquitectura integrada | Contratos y límites de la ruta adoptada. | [Arquitectura](../../experiments/ARCHITECTURE.md). |
 | Validación pendiente | Referencias POST independientes, lectores y prueba en pacientes no utilizados para desarrollar el método. | [Protocolo](post-tace-validation.md). |
 
-La suite integrada ejecutada con `docker compose exec -T -e HCC_PILOT_TEST=1 app python -m unittest discover -s tests -v` completó **165/165 pruebas en 139,280 s**, incluido el piloto HCC_002, después de incorporar el flujo de Slicer. Las comprobaciones previas de interfaz de HCC_002 y HCC_006 también pasaron: generación, estado sin revisar, visibilidad, persistencia y navegación. La ampliación incluye 31 pruebas sintéticas de preparación, evaluación y geometría de anotación. Estos resultados comprueban funcionamiento y contratos; no demuestran exactitud del contorno.
+Como antecedente de **2.0.0**, la suite integrada con `HCC_PILOT_TEST=1` completó **165/165 pruebas en 139,280 s**, incluido el piloto HCC_002, después de incorporar el flujo de Slicer. Sus comprobaciones de interfaz HCC_002/HCC_006 cubrieron generación, estado sin revisar, visibilidad, persistencia y navegación. La ampliación incluía 31 pruebas sintéticas de preparación, evaluación y geometría de anotación. Estos resultados históricos comprueban contratos de aquella revisión; no validan el nuevo refinamiento ni la exactitud del contorno.
 
 También se instaló y probó **Slicer 5.12.4 en macOS**. Tres ejecuciones gráficas con HCC_006 comprobaron carga nativa, borrador vacío, Paint real, deshacer/rehacer y exportación/reapertura exactas. Las seis comprobaciones de la última ejecución pasaron; los trazos de prueba permanecen separados del paquete del lector y no constituyen referencias expertas. La [guía](annotation-kit.md) incluye el acceso `Open_HCC_in_Slicer.command` y la alternativa multiplataforma; los [comandos de QA](../../experiments/README.md#prueba-funcional-de-slicer) permiten repetir el flujo.
 

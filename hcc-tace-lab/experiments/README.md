@@ -4,7 +4,9 @@ Este módulo investiga por qué cambia una predicción cuando cambian el context
 
 La máscara PRE `Mass` proporciona centro y caja. La variante hepática usa `Liver ∪ Mass` PRE únicamente para refinar el registro. Todas las máscaras de salida se calculan con intensidades POST. No hay una referencia POST independiente: los números describen ejecución y sensibilidad, no exactitud anatómica ni respuesta al tratamiento.
 
-## Reproducir
+**Estado del código, 13 de noviembre de 2026:** la implementación `2.1.0`, protocolo `liver_context_medsam2_boundary`, añade refinamiento 3D con logits en una banda fija de 2 mm. **Desplegada y comprobada:** 189/189 pruebas de backend, generación real de HCC_006 y siete grupos de comprobaciones de navegador en HCC_002/HCC_006. Se mantiene pendiente la validación anatómica independiente. `post_boundary` estudia ese cambio; `post_tracking` conserva las ablaciones de contexto sin el nuevo ajuste de borde. Véanse la [arquitectura](ARCHITECTURE.md) y las [ecuaciones del refinamiento POST](../docs/research/post-boundary-refinement.md).
+
+## Reproducir las ablaciones de contexto
 
 Requisitos: descargar las series CT y SEG del caso con el flujo de ingestión del proyecto, construir la imagen `app` y descargar el checkpoint fijado según el README principal. No se descargan modelos durante este experimento. Se verifican SHA-256 del checkpoint y YAML antes de inferir. Las dependencias son las de la imagen; no hay un entorno adicional para ejecutar este runner.
 
@@ -26,6 +28,36 @@ El manifiesto contiene identificadores técnicos públicos para HCC_002 y HCC_00
 Para el control HCC_002 se usa el mismo comando con `--case HCC_002 --variants full local160`. También se pueden reemplazar `--manifest` por los argumentos explícitos `--pre-series-uid`, `--post-series-uid`, `--pre-acquisition`, `--post-acquisition`, `--mass-segment` y `--liver-segment`. Las dos modalidades no se mezclan.
 
 Se ejecuta un predictor CPU de dos hilos y una variante a la vez. **No lanzar simultáneamente otra inferencia pesada.** Los pilotos tardaron aproximadamente 51–56 segundos por adquisición y variante, con pico de proceso cercano a 1 GiB; no es una garantía para otras imágenes o equipos. La inferencia admite hasta 256 cortes y 64 millones de vóxeles; el límite temporal de 300 segundos se comprueba entre cortes y no interrumpe un kernel bloqueado.
+
+## Refinamiento POST: bandas de 1/2/3 mm
+
+Con los mismos requisitos y la imagen reconstruida con el código actual:
+
+```bash
+mkdir -p ../output/post-boundary
+docker compose run --rm --no-deps -T \
+  --volume "$PWD/experiments:/app/experiments:ro" \
+  --volume "$PWD/../output/post-boundary:/experiment-output" \
+  --entrypoint python app -m experiments.post_boundary \
+  --data /data --output /experiment-output \
+  --manifest /app/experiments/manifest.example.json --case HCC_006
+```
+
+Cambiar solamente `--case HCC_002` permite repetir el procedimiento en el otro caso de desarrollo. El runner realiza una inferencia con registro hepático y contexto XY de 160 mm. Conserva los logits originales de la caja en el corte ancla, obtiene raw y aplica **por separado** bandas de 1, 2 y 3 mm sobre los mismos arrays. La banda principal es **2 mm**, con `smoothness_mm=0.5` y `edge_sigma_hu=20` fijos. No selecciona la variante con volumen o aspecto preferidos; si falla la principal, no la sustituye por otra.
+
+Cada carpeta nueva contiene `raw.npz`, `refined-1mm.npz`, `refined-2mm.npz` y `refined-3mm.npz` con máscaras nativas; `logits-field.npz` conserva el campo `[z,y,x]`, offsets y geometría. `comparison.json` registra añadidos/retirados, componentes, caja, padding, ROI y contactos de campo. `manifest.json` fija selección, orden SOP, hashes CT/SEG antes y después, checkpoint, configuración, código y versiones. Los artefactos fallidos se describen sin inventar una máscara.
+
+`application_checks` indica si una variante activaría un rechazo espacial de la app, incluido contexto insuficiente cuando la banda alcanza un límite XY artificial. No es validación anatómica. Las energías antes/después solo se comparan **dentro de una misma banda**, porque nodos y constantes cambian entre bandas. Los logits no son probabilidades clínicas calibradas y el cambio raw–refinada no es error frente a una referencia. Para aislar este cambio se comparan raw y refinada de **la misma ejecución**, no con un conteo histórico cuyo registro fue recalculado.
+
+El plotter opcional requiere las dependencias de lectura del proyecto y Matplotlib, fijado en `requirements-figures.txt`, en un entorno de figuras separado de la app. Con ese entorno ya preparado y rutas reales accesibles:
+
+```bash
+python -m experiments.plot_boundary \
+  --data /data --run /run-folder \
+  --output /research-output/HCC006-boundary
+```
+
+Genera PNG, PDF y JSON sin sobrescribir salidas, tras verificar fuentes y hashes de raw/refinada de 2 mm. Compara TC, raw, refinada y diferencias en planos axiales, coronal y sagital, con proporción física y ventana fija de nivel 40/ancho 400 HU. No produce una referencia experta ni guarda candidatas en la app.
 
 ## Variantes declaradas
 
@@ -51,7 +83,7 @@ Se ejecuta **una vez** el registro global de `hcclab.registration` por invocaci�
 
 El refinamiento hepático opcional parte de ese resultado y optimiza información mutua Mattes sobre `Liver ∪ Mass` PRE, con máscara corporal POST. Usa retícula auxiliar de 3 mm, 50 bins, muestreo 30 %, semilla 20261112, un hilo, pirámide 2/1, suavizado 1/0 mm, descenso de paso regular 1.0/0.02, relajación 0.5 y hasta 150 iteraciones por nivel. Los parámetros iniciales/finales, métrica y parada se guardan. Esta localización también queda **sin verificar**; la región `Liver` publicada puede excluir `Mass`.
 
-El wrapper experimental delega en `hcclab.registration.refine_pre_to_post`. Ese helper recibe un contexto booleano PRE y una transformación Euler3D inicial explícita; devuelve solamente transformación y diagnóstico. Excluye padding, exige al menos 64 vóxeles de contexto en la retícula auxiliar y 32 puntos válidos de métrica, y rechaza transformaciones no rígidas o que excedan 20°/100 mm. El límite cooperativo es 30 segundos. Estos controles numéricos no comprueban correspondencia anatómica. El protocolo 2 está desplegado localmente al 12 de noviembre de 2026, con 134/134 pruebas integradas aprobadas y revisión UI HCC_002 terminada; la revisión UI HCC_006 también pasó seis comprobaciones. Véase el [registro de arquitectura](ARCHITECTURE.md).
+El wrapper experimental delega en `hcclab.registration.refine_pre_to_post`. Ese helper recibe un contexto booleano PRE y una transformación Euler3D inicial explícita; devuelve solamente transformación y diagnóstico. Excluye padding, exige al menos 64 vóxeles de contexto en la retícula auxiliar y 32 puntos válidos de métrica, y rechaza transformaciones no rígidas o que excedan 20°/100 mm. El límite cooperativo es 30 segundos. Estos controles numéricos no comprueban correspondencia anatómica. Las 134/134 pruebas y revisiones UI HCC_002/HCC_006 documentadas al desplegar `2.0.0` son antecedentes históricos; no validan el nuevo refinamiento de `2.1.0`. Véase el [registro de arquitectura](ARCHITECTURE.md).
 
 Los informes registran series/adquisiciones/segmentos explícitos, identidad y geometría de retículas, hashes CT ordenados y SEG, pesos, configuración, versiones, plataforma y hashes de los módulos de experimentación y aplicación. Se comprueban de nuevo las fuentes antes de escribir cada resultado. Los píxeles originales no se reescriben.
 
@@ -70,12 +102,10 @@ Los NPZ, imágenes, CT y archivos derivados se conservan localmente. No agregarl
 
 ## Curvas de área por corte
 
-El plotter toma los informes nuevos del runner, verifica procedencia y máscaras, y conserva unidades y cortes nativos. Sus dependencias gráficas se instalan en un entorno aislado, separado de la app:
+El plotter toma los informes de `post_tracking`, verifica procedencia y máscaras, y conserva unidades y cortes nativos. En el entorno de figuras ya preparado con las dependencias opcionales de `requirements-figures.txt`:
 
 ```bash
-python3 -m venv /tmp/axivol-figures
-/tmp/axivol-figures/bin/python -m pip install -r experiments/requirements-figures.txt
-/tmp/axivol-figures/bin/python -m experiments.plot_tracking \
+python -m experiments.plot_tracking \
   /path/run/local160liver.json --output /research-output/area
 ```
 
@@ -92,13 +122,15 @@ docker compose run --rm --no-deps -T \
 
 Estas pruebas no cargan pesos. Comprueban espaciado anisotrópico, centros asimétricos, contención de caja, límites del FOV, exclusión de padding, colocación con offsets, no mutación, adquisición explícita y separación de fuentes/salidas. La suite completa del proyecto sigue siendo necesaria antes de integrar cambios de aplicación.
 
-Los seis pilotos iniciales y sus fallos se documentan en [ABLATION.md](ABLATION.md). Tras extraer el runner se ejecutó desde CT/SEG original la variante `local160liver` de HCC_006: 11120 vóxeles, cortes 49–64, 0 % fuera de ROI y 50.83 s de inferencia. Esta reproducción única no repite todo el lote ni garantiza igualdad bit a bit. El registro recalculado cambia ligeramente respecto al piloto congelado, que produjo 11485 vóxeles.
+Para los contratos del runner de borde, usar el mismo comando con `-p test_post_boundary_experiment.py`. Comprueba una sola inferencia, offsets, consistencia raw/logits, copias independientes por banda, padding, contexto artificial y rechazo de fuentes modificadas. Las siete pruebas sintéticas de este runner pasaron. El cierre de `2.1.0` incluye 189/189 pruebas de backend, generación real HCC_006 y siete grupos de comprobaciones de navegador; consultar el registro de integración en la guía de refinamiento.
+
+Los seis pilotos iniciales y sus fallos se documentan en [ABLATION.md](ABLATION.md). Como antecedente de `2.0.0`, tras extraer el runner se ejecutó desde CT/SEG original la variante `local160liver` de HCC_006: 11120 vóxeles, cortes 49–64, 0 % fuera de ROI y 50.83 s de inferencia. Esta reproducción única no repite todo el lote ni garantiza igualdad bit a bit. El registro recalculado cambia ligeramente respecto al piloto congelado, que produjo 11485 vóxeles. Ninguno de esos conteos incluye el refinamiento de borde de `2.1.0`.
 
 ## Fuentes y adaptación
 
 El checkpoint y la inferencia CPU provienen de [MedSAM2, commit fijado](https://github.com/bowang-lab/MedSAM2/blob/332f30d420f1d1b08e2a79b3ae6a602458808383/eff_medsam2_infer_CT_lesion_npz_recist.py). Se mantienen caja → máscara inicial, reinicio antes de propagación inversa y normalización del predictor. El script original utiliza indicación RECIST POST y limita su extensión z; aquí no existe esa anotación, por lo que seguir toda la adquisición es una adaptación experimental. El contexto XY local también es una ablación propia, no una característica clínicamente validada del modelo.
 
-Se importan helpers privados de la aplicación para reutilizar exactamente el cargador de pesos/configuración. Es una dependencia de investigación explícita; los hashes registran esos módulos y los tests deben revisarse si sus contratos cambian. El refinamiento de contexto y la geometría del campo XY se comparten con la implementación 2. El runner conserva variantes alternativas y resultados fallidos fuera del almacén de candidatas; su ejecución no modifica el protocolo activo de la app.
+Se importan helpers privados de la aplicación para reutilizar exactamente el cargador de pesos/configuración. Es una dependencia de investigación explícita; los hashes registran esos módulos y los tests deben revisarse si sus contratos cambian. El registro hepático y el campo XY se comparten con la app; `post_boundary` reutiliza además `post_model`, `post_boundary` y el solver de `refinement` de `2.1.0`. Los runners conservan variantes alternativas y resultados fallidos fuera del almacén de candidatas; su ejecución no modifica el protocolo activo de la app.
 
 ## Referencia POST independiente
 

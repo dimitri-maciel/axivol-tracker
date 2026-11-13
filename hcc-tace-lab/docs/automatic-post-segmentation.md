@@ -2,7 +2,7 @@
 
 ## Objetivo y alcance
 
-**Estado del código, 12 de noviembre de 2026:** implementación `2.0.0`, protocolo `liver_context_local_medsam2`, desplegada localmente. La suite integrada con `HCC_PILOT_TEST=1` pasó 134/134 pruebas en 135.691 s; la revisión UI HCC_002 pasó ocho grupos de comprobaciones en un almacén QA aislado. La revisión UI HCC_006 también pasó seis comprobaciones. Estos resultados de software y los pilotos no demuestran exactitud anatómica. El [índice de investigación](research/README.md), las [matemáticas del seguimiento](research/post-mathematics.md) y el [registro de arquitectura](../experiments/ARCHITECTURE.md) separan evidencia, decisiones y trabajo pendiente.
+**Estado del código, 13 de noviembre de 2026:** implementación `2.1.0`, protocolo `liver_context_medsam2_boundary`, con ajuste 3D del borde POST mediante logits y una banda fija de 2 mm. **Desplegada y comprobada:** 189/189 pruebas de backend, generación real de HCC_006 y siete grupos de comprobaciones de navegador en HCC_002/HCC_006. Se mantiene pendiente la validación anatómica independiente. Los ensayos de `2.0.0` se conservan abajo como históricos. El [índice de investigación](research/README.md), las [matemáticas del seguimiento](research/post-mathematics.md) y la [guía del refinamiento POST](research/post-boundary-refinement.md) separan implementación, evidencia y límites.
 
 El objetivo es proponer una máscara sobre la TC posterior a TACE utilizando la información PRE para localizar una región de búsqueda. El flujo separa **encontrar la región correspondiente** de **delimitarla con los píxeles POST**. La salida, cuando existe, es una candidata `unreviewed`; el registro tiene estado `estimated_unverified` hasta disponer de una comprobación anatómica independiente.
 
@@ -10,7 +10,7 @@ La información PRE utilizada por este flujo son los segmentos publicados `Mass`
 
 No se pretende determinar automáticamente respuesta al tratamiento, tejido viable ni necrosis. Un volumen de candidata POST describe el objeto que produjo el algoritmo en esa retícula; no es todavía una medición clínica de respuesta.
 
-La ruta automática de esta revisión utiliza **registro rígido global → refinamiento con contexto hepático PRE → localización de `Mass` → Efficient MedSAM2 tiny con contexto XY local POST**. El modelo tiene pesos publicados; sus pesos no se entrenaron ni ajustaron en Axivol. Las decisiones de contexto y localización sí se exploraron con HCC_002/HCC_006: son casos de desarrollo, no evaluación independiente. Los métodos de crecimiento por HU y corte de grafo se investigaron como comparadores, pero su fuga hacia tejidos vecinos en el piloto impidió adoptarlos como salida automática principal. Si el modelo falla, no se sustituye por una máscara PRE ni por una salida HU silenciosa.
+La ruta automática utiliza **registro rígido global → contexto hepático PRE → localización de `Mass` → Efficient MedSAM2 tiny en contexto XY POST → refinamiento 3D del borde**. Los pesos publicados no se entrenaron ni ajustaron en Axivol. Las decisiones de contexto y localización sí se exploraron con HCC_002/HCC_006: son casos de desarrollo. El nuevo grafo usa logits POST y cambios locales de HU; se distingue de los antiguos comparadores basados en intensidades, cuya fuga impidió adoptarlos como salida principal. Un fallo del modelo o del refinamiento no activa una máscara PRE ni una salida HU sustitutiva.
 
 ## Por qué hace falta este desarrollo
 
@@ -129,10 +129,10 @@ Esta arquitectura emplea características aprendidas de la imagen y memoria entr
 
 $$
 \ell_z=F_\theta(X_z,\text{caja inicial},\text{memoria POST}),
-\qquad M_z=[\ell_z>0].
+\qquad M_z^{raw}=[\ell_z>0].
 $$
 
-`θ` son los pesos descargados; `X` es la imagen preparada para la red; `ℓ` son sus puntuaciones antes de la función sigmoide. El umbral cero equivale a una sigmoide mayor de 0,5, pero **no debe presentarse como probabilidad clínica calibrada de tumor**. La ecuación resume la entrada y decisión; no reemplaza la arquitectura detallada del repositorio original.
+`θ` son los pesos descargados; `X` es la imagen preparada; `ℓ` son sus puntuaciones antes de la sigmoide. El umbral cero define la máscara **raw**, anterior al ajuste de borde, y no es una probabilidad clínica calibrada. En el corte ancla se conservan los logits originales condicionados por la caja: los generados al reinyectar una máscara binaria no aportan nueva evidencia de imagen.
 
 ### Preparación de imagen y retícula de salida
 
@@ -153,13 +153,19 @@ u=\operatorname{clip}\left(\frac{HU+160}{400},0,1\right),
 \qquad X_c=\frac{u-\mu_c}{\sigma_c}.
 $$
 
-Se repite la imagen gris en tres canales y se aplican las medias `(0,485;0,456;0,406)` y desviaciones `(0,229;0,224;0,225)` usadas por el predictor original. Si el campo de entrada no mide `512×512`, se redimensiona con interpolación bilineal (`align_corners=false`). El predictor devuelve puntuaciones a la altura y anchura nativas del campo; se aplica el umbral allí y se inserta el resultado en el volumen POST usando sus offsets. Los cortes z, su espaciamiento y su orden DICOM permanecen nativos. Una retícula final nativa no significa que la red no haya empleado redimensionamiento interno.
+Se repite la imagen gris en tres canales y se aplican las medias `(0,485;0,456;0,406)` y desviaciones `(0,229;0,224;0,225)` upstream. Si hace falta, el campo se redimensiona a `512×512` con interpolación bilineal (`align_corners=false`). El predictor devuelve logits a la retícula nativa del campo; allí se calcula raw y se refina el borde antes de insertar la salida con sus offsets POST. Los cortes z, espaciado y orden DICOM permanecen nativos; la red sí puede emplear redimensionamiento interno.
 
 Los ceros almacenados fuera del campo XY significan **región no evaluada**, no fondo anatómico demostrado. `inference_field_yx`, sus dimensiones, la caja nativa y la caja local, el redimensionamiento y `outside_inference_field=not_assessed` quedan registrados. No se interpola una máscara PRE para llenar el exterior.
 
 La ventana satura los valores altos: dos intensidades mayores de `240 HU` tendrán la misma entrada normalizada. Eso puede ocultar diferencias de Lipiodol y debe estudiarse. Los HU originales no se modifican. El padding se representa como entrada negra y se excluye de la máscara final, registrando cuántos píxeles predichos fueron descartados.
 
 Se desactiva el relleno opcional de agujeros que upstream implementa mediante extensión CUDA; no se reemplaza por erosión, dilatación ni suavizado ocultos. El resto de la configuración del predictor queda versionado. El modelo se carga bajo `eval` y `torch.inference_mode`; no se calculan gradientes ni se actualizan pesos.
+
+### Refinamiento de borde POST en 2.1.0
+
+El corte de grafo 3D puede cambiar etiquetas solo en una banda de **2 mm**, medida entre centros de vóxel y la clase opuesta de raw. Usa los logits como coste de etiqueta y las diferencias de HU POST entre seis vecinos como continuidad, ponderadas por volumen y área física. Fija `smoothness_mm=0.5` y `edge_sigma_hu=20`; no ajusta histogramas PRE ni busca un volumen deseado. Si no disminuye la energía dentro de la tolerancia, conserva raw; un fallo de ejecución produce abstención.
+
+El diagnóstico distingue conteo raw y final, añadidos/retirados, cortes modificados, distancias y energía antes/después. Estos son descriptores del cambio, **no error anatómico ni confianza calibrada**. La banda limita la modificación, no demuestra precisión de 2 mm. Las [ecuaciones y límites](research/post-boundary-refinement.md) y el [runner de bandas 1/2/3 mm](../experiments/README.md#refinamiento-post-bandas-de-123-mm) documentan la sensibilidad sin elegir automáticamente una variante ganadora.
 
 ### Qué ocurrió con los métodos clásicos
 
@@ -172,7 +178,7 @@ E(L)=\sum_p D_p(L_p;I_{POST})
 +\sum_{\{p,q\}\in\mathcal N}w_{pq}(I_{POST})[L_p\ne L_q].
 $$
 
-Su piloto tampoco aisló de manera útil la región buscada. El corte mínimo puede resolver exactamente una energía sin resolver el significado anatómico del objeto. [Fundamento original](https://www.csd.uwo.ca/~yboykov/Papers/iccv01.pdf). Estos comparadores quedan separados del predictor principal y no se utilizan como sustitución automática al fallar este.
+Su piloto tampoco aisló de manera útil la región buscada. El corte mínimo puede resolver una energía sin resolver el significado anatómico del objeto. [Fundamento original](https://www.csd.uwo.ca/~yboykov/Papers/iccv01.pdf). Esos comparadores históricos de región siguen separados: no son el nuevo refinamiento acotado que utiliza logits de MedSAM2 ni sustituyen al predictor si falla.
 
 El flujo debe admitir abstención. No se debe forzar una máscara no vacía porque exista `Mass` en PRE, devolver la máscara trasladada si falla el cálculo ni aumentar repetidamente el área o los umbrales hasta obtener un objeto. Si no se resuelve una región con evidencia suficiente, se registra el fallo y se conserva disponible la revisión asistida.
 
@@ -199,6 +205,8 @@ Si la candidata alcanza el borde de la adquisición, se registra una advertencia
 
 Si la máscara válida alcanza un borde **artificial** del campo XY de inferencia que queda dentro de la adquisición, se rechaza con `incomplete_input_field`. Se conservan las caras en `internal_field_touch_faces`. Un borde artificial podría truncar el objeto y no debe presentarse como delimitación completa; la revisión de un campo mayor sería otra ejecución, no una ampliación automática oculta. Este control se aplica después de excluir padding y antes del control de mayoría fuera de ROI.
 
+En 2.1.0 esos controles se aplican a raw y a la máscara refinada. Si la banda editable alcanza un límite XY artificial, se rechaza también con `incomplete_boundary_context`, aunque el foreground aún no lo toque. `boundary_refinement_failed` y `empty_refinement` distinguen un fallo de cálculo y una salida vacía. No se guarda raw como alternativa silenciosa.
+
 Los umbrales empleados para estos controles son configuraciones del proyecto, no límites clínicos publicados. Un control favorable significa únicamente que no se activó ese motivo de rechazo. No demuestra que sea la misma lesión ni que su borde sea correcto.
 
 Ante un fallo, el resultado debe distinguir el punto en que ocurrió: registro, localización o delimitación. Un fallo de registro no equivale a ausencia de lesión. Una segmentación vacía o no resuelta tampoco demuestra respuesta completa al tratamiento.
@@ -219,7 +227,7 @@ El control no borra vóxeles fuera de la caja ni devuelve la intersección másc
 
 **El límite del 50 % es una regla de ingeniería elegida después de observar HCC_006.** No procede del artículo de MedSAM2 ni constituye un umbral clínico validado. Puede rechazar crecimiento real o un registro impreciso, y puede aceptar una estructura equivocada situada dentro de la región. HCC_002 y HCC_006 son casos de desarrollo de esta regla, no una evaluación independiente de sensibilidad o especificidad. Su finalidad actual es impedir que una discrepancia espacial grande se presente silenciosamente como candidata lista para revisión.
 
-Al aplicar el control a las salidas examinadas:
+Ejemplos históricos anteriores a 2.0.0 al aplicar el control a las salidas examinadas:
 
 | Caso y adquisición POST | Vóxeles dentro | Vóxeles fuera | Fracción fuera | Resultado del control |
 | --- | ---: | ---: | ---: | --- |
@@ -282,7 +290,7 @@ Por ejecución se guardan fuentes PRE y POST con hashes, etiquetas PRE originale
 
 `registration.context_segments` y `baseline_source.registration_context_segments` conservan los números y etiquetas realmente utilizados. `Mass` y `Liver` proceden del mismo SEG publicado, cuyo SOP y hash se registran una vez como fuente compartida. La lectura sigue el orden hash → verificación de cabecera fresca y etiquetas → decodificación → comprobación de hashes antes de guardar. No se acepta una etiqueta antigua de caché si el archivo cambió.
 
-La candidata de esta revisión lleva `method.name=registered_post_segmentation`, `method.version=2.0.0` y `method.protocol=liver_context_local_medsam2`. Los hashes incluyen `registration.py`, `post_automatic.py`, `post_model.py`, `inference_field.py`, `model_assets.py` y `volume.py`. El modelo y su configuración conservan sus propias huellas. Un informe de abstención incluye fuentes y diagnósticos, pero no una máscara ni volumen sustitutos.
+La candidata de esta revisión lleva `method.name=registered_post_segmentation`, `method.version=2.1.0` y `method.protocol=liver_context_medsam2_boundary`. Los hashes incluyen `registration.py`, `post_automatic.py`, `post_model.py`, **`post_boundary.py` y `refinement.py`**, `inference_field.py`, `model_assets.py` y `volume.py`. `raw_prediction` conserva conteo y hashes de arrays raw/logits; `boundary_refinement` registra el ajuste y `segmentation.voxels` el conteo final. Las candidatas anteriores conservan sus bytes y versión. Una abstención no crea máscara ni volumen sustitutos.
 
 El límite de inferencia de 300 segundos es cooperativo: se comprueba entre cortes. No interrumpe una operación nativa bloqueada a mitad de un corte. El límite del registro se comprueba entre iteraciones del optimizador. Son controles de ejecución, no garantías de latencia estricta.
 
@@ -312,14 +320,16 @@ Los pesos se descargan en `data/models`, separados del repositorio y de la image
 | `hcclab/post_automatic.py` | Orquestación, diagnóstico y comparador HU explícito. |
 | `hcclab/inference_field.py` | Campo XY físico, contención de caja y offsets sin modificar z. |
 | `hcclab/post_model.py` | Preparación de POST, predictor CPU, propagación y controles. |
+| `hcclab/post_boundary.py` y `hcclab/refinement.py` | Banda física, energía de logits/HU y solver acotado de corte de grafo. |
 | `hcclab/model_assets.py` | Descarga y verificación del checkpoint. |
 | `hcclab/lab.py` | Procedencia DICOM, permisos de operación y almacenamiento separado. |
 | `tests/test_post_model.py` | Todos los cortes, cajas nativas/locales, anisotropía, padding y rechazo de borde artificial sin pesos. |
 | `experiments/post_tracking.py` | Ablaciones desde TC/SEG originales, fuera del almacén de candidatas. |
+| `experiments/post_boundary.py` | Una inferencia, logits/raw y sensibilidad independiente de bandas de 1/2/3 mm. |
 
 Desde `hcc-tace-lab`, las comprobaciones pertinentes son `docker compose exec -T app python -m unittest discover -s tests -p test_post_model.py -v` y la suite completa indicada en el README. Los tests sintéticos verifican contratos de software; no demuestran exactitud sobre lesiones reales. El conjunto de integración público requiere datos descargados y checkpoint verificado.
 
-La [guía del runner](../experiments/README.md) reproduce variantes y curvas con procedencia completa. Por ejemplo, con las fuentes originales ya ingeridas:
+La [guía de runners](../experiments/README.md) distingue las bandas de borde 2.1.0 de las ablaciones históricas sin ese ajuste. Para estas últimas, con las fuentes originales ya ingeridas:
 
 ```bash
 mkdir -p ../output/post-experiments
@@ -334,7 +344,7 @@ docker compose run --rm --no-deps -T \
 
 La imagen Docker usada debe contener la revisión de código descrita. Este comando crea un ensayo separado, no una candidata de la app. El runner omite deliberadamente el rechazo final por mayoría fuera de ROI para conservar también fallos de ablación; por eso un resultado del runner no significa que haya superado todos los controles de producción. Consulte [ABLATION.md](../experiments/ABLATION.md) para resultados completos y límites.
 
-### Comprobación integrada y UI del protocolo 2
+### Comprobación histórica integrada y UI de 2.0.0
 
 La suite con `HCC_PILOT_TEST=1` aprobó 134/134 pruebas en 135.691 s. La prueba UI real HCC_002 se ejecutó en un contenedor aislado, con PRE adquisición 1, `Mass` 2 y `Liver` 1, y POST adquisición 1. Su única generación automática devolvió 308628 vóxeles, con máxima área en el corte 72 desde cero, campo XY `[151,0]–[473,322)` y ningún contacto con borde artificial. De esos vóxeles, 665 quedaron fuera de la ROI de búsqueda (0.2155 %), conservados en la candidata; no se recortó a la región PRE.
 
@@ -348,7 +358,7 @@ Una auditoría posterior de solo lectura verificó los bytes originales y la can
 
 Los hashes CT ordenados, SOP y retícula coincidieron exactamente con un ensayo anatómico separado de TotalSegmentator. Solo entonces se calculó solapamiento: 0 vóxeles con sus predicciones renales y 2152 (19.26 %) con su predicción de hígado. **Son comparaciones entre modelos, no exactitud ni identificación anatómica garantizada**; una máscara hepática automática puede excluir parte del objetivo tratado. La candidata no se recortó ni modificó. El montaje y el JSON permanecen locales en `output/post-improvement/ui006`.
 
-### Resultados históricos anteriores al protocolo 2
+### Resultados históricos anteriores a 2.0.0
 
 El primer piloto aislado del adaptador sobre HCC_002, adquisición POST 1, procesó los 97 cortes en aproximadamente 50 segundos con dos hilos de CPU y un pico observado de 524 MiB. La caja inicial del corte 67, contando desde cero, fue `[52,255,210,398]` en coordenadas xyxy de centros inclusivos. La candidata contenía 443 727 vóxeles, sin padding y sin tocar las caras de la adquisición. Estos son **resultados de ejecución de un piloto**, no resultados de precisión ni mediciones clínicas. El tiempo y la memoria pueden variar en la aplicación y con otras adquisiciones. La revisión visual de cortes distribuidos comprueba fallos evidentes de presentación y extensión, pero no sustituye una referencia anatómica independiente.
 
@@ -366,7 +376,7 @@ Después de este fallo se incorporó el control de fracción fuera de la región
 
 La candidata histórica fallida de HCC_006 se conserva, junto con metadatos y nota de revisión, en almacenamiento local de auditoría separado de las propuestas activas. No se la sobrescribe con un nuevo resultado. Esto se distingue de una abstención nueva: esta última no guarda una máscara de candidata, y su diagnóstico puede exportarse. Las candidatas previas permanecen intactas.
 
-### Evidencia que motivó el protocolo 2
+### Evidencia que motivó 2.0.0
 
 El [registro de ablaciones](../experiments/ABLATION.md) conserva todos los pilotos, incluidos resultados con deriva. En HCC_006, el contexto local de 160 mm eliminó la extensión inferior observada en el piloto, pero cambió sustancialmente la región predicha al variar ventana o localización. Un campo de 240 mm produjo una extensión de apariencia renal aun pasando el control de mayoría en ROI. El refinamiento hepático desplazó la predicción hacia una región de alta intensidad; no demuestra haber cubierto todo el objetivo tratado.
 
