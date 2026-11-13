@@ -112,6 +112,7 @@ class BlindPackageTests(unittest.TestCase):
                 self.assertFalse(any('candidate' in name or 'manager' in name for name in archive.namelist()))
             self.assertEqual(sorted(p.name for p in reader.glob('*.nrrd')),
                              ['POST_CT.nrrd', 'PRE_CT.nrrd', 'PRE_Mass.nrrd'])
+            self.assertTrue((reader / 'Open_HCC_in_Slicer.command').stat().st_mode & 0o111)
             form = json.loads((reader / 'reader_form.json').read_text())
             for key in ('reader_id', 'qualifications', 'hepatic_imaging_expertise_attested',
                         'model_output_seen', 'independently_drawn', 'annotation_sha256', 'reviewed_utc'):

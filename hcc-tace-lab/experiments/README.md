@@ -122,13 +122,41 @@ docker compose run --rm --no-deps -T \
 
 El comando imprime una carpeta nueva `HCC_006-reference-…`. Contiene:
 
-- `reader/` y `reader.zip`: TC POST completa, TC PRE y `Mass` original, identificación, formulario pendiente e instrucciones. No contienen máscara, caja, corte destacado ni estadísticas de la predicción POST.
+- `reader/` y `reader.zip`: TC POST completa, TC PRE y `Mass` original, identificación, formulario pendiente, instrucciones, ayudante Python y acceso `Open_HCC_in_Slicer.command` para macOS. No contienen máscara, caja, corte destacado ni estadísticas de la predicción POST.
 - `manager/`: candidata congelada, soporte válido de CT, manifiesto de evaluación y copia de la identidad del paquete. No entregar al lector.
 - `preparation.json`: controles técnicos de exportación y estado pendiente. La inexistencia de una referencia no se convierte en un resultado de exactitud.
 
 La exportación relee cada NRRD y compara todos sus valores, forma, origen, espaciado y orientación. Comprueba los hashes de CT/SEG/candidata antes y después. No registra, interpola, recorta ni modifica las imágenes originales. Los archivos y el ZIP permanecen en `output/`, fuera de Git y del contexto Docker. Un ZIP sin predicción no prueba el cegamiento del lector: la exposición previa se declara separadamente.
 
-El ayudante `open_in_slicer.py` requiere 3D Slicer y una escena vacía. No borra escenas ni genera un contorno. Su API se revisó contra documentación oficial; no se ha probado gráficamente en Slicer en este equipo. La guía incluye exportación manual alternativa. Conservar la nota de operaciones del lector junto con `export.json`.
+El ayudante `open_in_slicer.py` requiere 3D Slicer y una escena vacía. No borra escenas ni genera un contorno. En macOS, `reader/Open_HCC_in_Slicer.command` abre una instancia nueva de `/Applications/Slicer.app`; se guarda el borrador con `save_reference()` en su consola Python. La alternativa multiplataforma usa `runpy`, `kit['open_case']()` y `kit['save_reference']()`, como indica la guía. Esta también incluye exportación manual. Conservar la nota de operaciones del lector junto con `export.json`.
+
+### Prueba funcional de Slicer
+
+El 12 de noviembre de 2026 se instaló y probó Slicer **5.12.4** en macOS. Se completaron tres ejecuciones gráficas con HCC_006: PRE adquisición 3, `Mass` segmento 2 y POST adquisición 1. La última registró seis comprobaciones satisfactorias en `output/slicer-qa/run-20261113T033001-ac89d200/validation.json`:
+
+- Geometría nativa PRE y POST idéntica a los NRRD de origen.
+- Solo entradas del lector cargadas, máscara PRE oculta y borrador POST vacío.
+- Un trazo no vacío creado mediante eventos reales del efecto **Paint**.
+- **Undo** recuperó el borrador vacío y **Redo** restauró exactamente el trazo.
+- Exportación y reapertura conservaron píxeles binarios y geometría; las declaraciones del lector permanecieron `null`.
+- Los archivos del lector conservaron sus bytes y no se cargó ni escribió una candidata.
+
+La ejecución medida duró **6,14 s, sin incluir el arranque de Slicer**. Es tiempo de una comprobación funcional, no tiempo de anotación experta ni rendimiento anatómico. El trazo fue arbitrario: no se calculó Dice, HD95 ni otra métrica de exactitud de HCC_006.
+
+Para repetir desde `hcc-tace-lab` en macOS, sustituir `PAQUETE` por la carpeta real. La salida QA debe quedar fuera de `reader/`:
+
+```bash
+AXIVOL_READER_DIR="$PWD/../output/reference-review/PAQUETE/reader"
+AXIVOL_SLICER_QA_DIR="$PWD/../output/slicer-qa"
+open -n -W -a /Applications/Slicer.app \
+  --env "AXIVOL_READER_DIR=$AXIVOL_READER_DIR" \
+  --env "AXIVOL_SLICER_QA_DIR=$AXIVOL_SLICER_QA_DIR" \
+  --env AXIVOL_SLICER_QA_EXIT=1 \
+  --args --no-splash --ignore-slicerrc \
+  --python-script "$PWD/experiments/slicer_annotation_smoke.py"
+```
+
+El script crea una carpeta `run-…` nueva con comprobaciones, capturas y un retorno marcado como ensayo funcional. `AXIVOL_SLICER_QA_EXIT=1` cierra esa instancia de Slicer al terminar; `-W` espera su cierre. No se incorpora el trazo a `reader.zip`, al almacén de candidatas ni a una referencia del evaluador. Nadie debe completar declaraciones expertas para convertir esta prueba en una evaluación anatómica.
 
 ### Evaluar un retorno auténtico
 

@@ -160,6 +160,8 @@ def open_case():
     editor.setSegmentationNode(post_seg)
     editor.setSourceVolumeNode(post)
     editor.setCurrentSegmentID(segment_id)
+    editor.setUndoEnabled(True)
+    editor.setMaximumNumberOfUndoStates(10)
     _state.update(folder=folder, case=case, post=post, segmentation=post_seg, segment_id=segment_id,
                   pixels=hashlib.sha256(slicer.util.arrayFromVolume(post).tobytes()).hexdigest())
     print('Blinded inputs loaded. POST has an EMPTY manual draft. PRE is not registered to POST.')

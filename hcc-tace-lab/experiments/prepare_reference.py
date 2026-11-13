@@ -126,6 +126,9 @@ def prepare(data, annotations, output, case, selection, candidate_id):
         write_json(reader / 'reader_form.json', form)
         shutil.copyfile(CODE / 'docs/research/annotation-kit.md', reader / 'README.md')
         shutil.copyfile(CODE / 'experiments/templates/open_in_slicer.py', reader / 'open_in_slicer.py')
+        launcher = reader / 'Open_HCC_in_Slicer.command'
+        shutil.copyfile(CODE / 'experiments/templates/Open_HCC_in_Slicer.command', launcher)
+        launcher.chmod(0o755)
         candidate = write_native(manager / 'candidate.nrrd', mask.astype(np.uint8), sources['post_stack'])
         valid = write_native(manager / 'post_valid.nrrd', sources['post_valid'].astype(np.uint8), sources['post_stack'])
         shutil.copyfile(reader / 'case.json', manager / 'reader_case.json')
@@ -147,7 +150,7 @@ def prepare(data, annotations, output, case, selection, candidate_id):
             raise GeometryError('The saved candidate changed while freezing the evaluation package.')
         # Only this explicit whitelist can enter the reader archive.
         reader_names = ['PRE_CT.nrrd', 'PRE_Mass.nrrd', 'POST_CT.nrrd', 'case.json',
-                        'reader_form.json', 'README.md', 'open_in_slicer.py']
+                        'reader_form.json', 'README.md', 'open_in_slicer.py', 'Open_HCC_in_Slicer.command']
         if sorted(p.name for p in reader.iterdir()) != sorted(reader_names):
             raise ValueError('Unexpected artifact in the blinded reader package.')
         with ZipFile(folder / 'reader.zip', 'w', compression=ZIP_DEFLATED) as archive:

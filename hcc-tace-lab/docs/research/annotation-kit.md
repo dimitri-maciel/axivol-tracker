@@ -12,6 +12,7 @@ Entregar únicamente la carpeta `reader/`:
 | `PRE_CT.nrrd`, `PRE_Mass.nrrd` | Imagen y máscara PRE publicada, para identificar la lesión correspondiente. |
 | `case.json`, `reader_form.json` | Identificación de caso, adquisición y paquete; declaración del lector. |
 | `README.md`, `open_in_slicer.py` | Instrucciones y ayuda para abrir y guardar la anotación. |
+| `Open_HCC_in_Slicer.command` | Acceso para macOS; abre una instancia nueva de Slicer instalado en `/Applications/Slicer.app`. |
 
 La carpeta `manager/` queda con el coordinador: contiene manifiesto de evaluación, candidata automática y soporte válido. **No entregar al lector `candidate.nrrd`, `candidate.json`, estadísticas, capturas ni comparaciones de Axivol.** Tampoco mostrar otras predicciones para que escoja una. No añadir la máscara automática a la escena de Slicer.
 
@@ -34,9 +35,9 @@ Solo `delineable` y `absence_confirmed`, con las declaraciones requeridas, permi
 
 ## 3. Delimitar en 3D Slicer
 
-Se requiere [3D Slicer](https://www.slicer.org/). No está instalado en el equipo donde se preparó este paquete y no se ha ejecutado allí este flujo gráfico. La documentación oficial describe [Segment Editor](https://slicer.readthedocs.io/en/latest/user_guide/modules/segmenteditor.html) y la [exportación a labelmap](https://slicer.readthedocs.io/en/latest/user_guide/modules/segmentations.html#export-segmentation-to-labelmap-volume).
+El flujo se probó en **3D Slicer 5.12.4 en macOS**, el 12 de noviembre de 2026: carga nativa de HCC_006, PRE adquisición 3 con `Mass` segmento 2 y POST adquisición 1; borrador vacío, Paint real, deshacer/rehacer exacto y exportación/reapertura sin cambios de píxeles ni geometría. Fue un trazo funcional, no una delineación anatómica: no se creó una referencia experta ni se calcularon métricas de exactitud. La documentación oficial describe [Segment Editor](https://slicer.readthedocs.io/en/latest/user_guide/modules/segmenteditor.html) y la [exportación a labelmap](https://slicer.readthedocs.io/en/latest/user_guide/modules/segmentations.html#export-segmentation-to-labelmap-volume).
 
-1. Abrir una escena nueva, sin predicciones previas. El ayudante del paquete se ejecuta desde la consola Python de Slicer; sustituir la ruta de ejemplo:
+1. **En macOS:** abrir `Open_HCC_in_Slicer.command` dentro de `reader/`. Requiere Slicer en `/Applications/Slicer.app` y abre una instancia nueva con las imágenes y un borrador POST vacío, sin borrar otra sesión. **Alternativa multiplataforma:** abrir una escena vacía y ejecutar lo siguiente en la consola Python de Slicer, sustituyendo la ruta:
 
    ```python
    import runpy
@@ -52,7 +53,13 @@ Se requiere [3D Slicer](https://www.slicer.org/). No está instalado en el equip
 
 El retorno es **`POST-label.nrrd`**, un labelmap escalar 3D con valores **0 y 1**, misma forma, origen, orientación y espaciado que `POST_CT.nrrd`, más `reader_form.json`. No devolver solamente una captura, una superficie o una segmentación multicapa `.seg.nrrd`.
 
-En la misma consola:
+En la consola Python, si se abrió con el acceso de macOS:
+
+```python
+save_reference()
+```
+
+Si se abrió mediante `runpy`, usar en cambio:
 
 ```python
 kit['save_reference']()
