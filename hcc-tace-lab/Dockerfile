@@ -19,6 +19,7 @@ COPY hcclab ./hcclab
 COPY web ./web
 COPY tests ./tests
 COPY experiments ./experiments
+COPY docs/research/annotation-kit.md docs/research/reader-form.example.json ./docs/research/
 RUN useradd --system --uid 10001 --no-create-home lab \
     && mkdir /annotations && chown lab:lab /annotations
 USER lab

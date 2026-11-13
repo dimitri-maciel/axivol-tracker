@@ -12,6 +12,7 @@ Este espacio explica cómo investigar la delimitación de una lesión después d
 | 4 | [Reproducir los experimentos](../../experiments/README.md) | ¿Cómo ejecutar el CLI y leer su manifiesto, máscaras y diagnósticos? |
 | 5 | [Modelos y comparadores](post-tace-models.md) | ¿Qué aportaron nnInteractive y TotalSegmentator y cuáles son sus costes y límites? |
 | 6 | [Referencia y validación](post-tace-validation.md) | ¿Cómo conseguir anotaciones independientes y evaluar sin contaminar la prueba? |
+| 6a | [Paquete de anotación](annotation-kit.md) y [comandos de preparación y evaluación](../../experiments/README.md#referencia-post-independiente) | ¿Cómo entregar las imágenes a un lector sin mostrar la predicción y comparar después su referencia? |
 | 7 | [Revisión experimental](code-review-experiments.md) y [revisión de integración](code-review-runtime.md) | ¿Qué se revisó, qué defectos se corrigieron y qué comprobaciones quedan? |
 
 Para explicar el proyecto oralmente, conviene empezar por el objetivo de la lesión completa, describir el fallo de identidad y terminar con la comparación experimental y la referencia experta que falta. Los símbolos y las fórmulas sirven para entender el procedimiento, no para sustituir esa explicación.
@@ -28,7 +29,7 @@ Estado al redactar este índice, 12 de noviembre de 2026:
 | Arquitectura integrada | Contratos y límites de la ruta adoptada. | [Arquitectura](../../experiments/ARCHITECTURE.md). |
 | Validación pendiente | Referencias POST independientes, lectores y prueba en pacientes no utilizados para desarrollar el método. | [Protocolo](post-tace-validation.md). |
 
-La suite integrada ejecutada con `docker compose exec -T -e HCC_PILOT_TEST=1 app python -m unittest discover -s tests -v` completó **134/134 pruebas en 135,691 s**, incluido el piloto HCC_002. Las comprobaciones de interfaz de HCC_002 y HCC_006 también pasaron: generación, estado sin revisar, visibilidad, persistencia y navegación. Estos resultados comprueban funcionamiento y contratos; no demuestran exactitud del contorno.
+La suite integrada ejecutada con `docker compose exec -T -e HCC_PILOT_TEST=1 app python -m unittest discover -s tests -v` completó **165/165 pruebas en 133,234 s**, incluido el piloto HCC_002. Las comprobaciones de interfaz de HCC_002 y HCC_006 también pasaron: generación, estado sin revisar, visibilidad, persistencia y navegación. La ampliación incluye 31 pruebas sintéticas de preparación, evaluación y geometría de anotación. Slicer no se ejecutó gráficamente. Estos resultados comprueban funcionamiento y contratos; no demuestran exactitud del contorno.
 
 Los resultados de experimentos no sustituyen automáticamente sus candidatas ni los segmentos publicados. Para saber qué versión se ejecutó, consultar el manifiesto y sus hashes, además del nombre del método. Las máscaras históricas del protocolo anterior conservan su propia versión y procedencia.
 

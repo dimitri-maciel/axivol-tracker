@@ -1,0 +1,19 @@
+{
+  "reader_id": null,
+  "qualifications": null,
+  "hepatic_imaging_expertise_attested": null,
+  "independently_drawn": null,
+  "model_output_seen": null,
+  "case_id": null,
+  "post_series_uid": null,
+  "post_acquisition": null,
+  "package_id": null,
+  "reference_ct_sha256": null,
+  "target_definition": "whole_treated_lesion",
+  "target_confirmed": null,
+  "lesion_identity_confirmed": null,
+  "evaluability": null,
+  "annotation_file": null,
+  "annotation_sha256": null,
+  "reviewed_utc": null
+}

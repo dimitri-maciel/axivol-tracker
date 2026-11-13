@@ -99,3 +99,53 @@ Los seis pilotos iniciales y sus fallos se documentan en [ABLATION.md](ABLATION.
 El checkpoint y la inferencia CPU provienen de [MedSAM2, commit fijado](https://github.com/bowang-lab/MedSAM2/blob/332f30d420f1d1b08e2a79b3ae6a602458808383/eff_medsam2_infer_CT_lesion_npz_recist.py). Se mantienen caja → máscara inicial, reinicio antes de propagación inversa y normalización del predictor. El script original utiliza indicación RECIST POST y limita su extensión z; aquí no existe esa anotación, por lo que seguir toda la adquisición es una adaptación experimental. El contexto XY local también es una ablación propia, no una característica clínicamente validada del modelo.
 
 Se importan helpers privados de la aplicación para reutilizar exactamente el cargador de pesos/configuración. Es una dependencia de investigación explícita; los hashes registran esos módulos y los tests deben revisarse si sus contratos cambian. El refinamiento de contexto y la geometría del campo XY se comparten con la implementación 2. El runner conserva variantes alternativas y resultados fallidos fuera del almacén de candidatas; su ejecución no modifica el protocolo activo de la app.
+
+## Referencia POST independiente
+
+La referencia debe delimitarla un especialista sin ver primero la predicción del modelo. Los comandos siguientes preparan archivos y comparan una referencia suministrada; no generan anotaciones expertas. HCC_006 continúa siendo un caso de desarrollo. Véanse la [guía para el lector](../docs/research/annotation-kit.md) y el [protocolo de validación](../docs/research/post-tace-validation.md).
+
+### Preparar el caso
+
+Reconstruir la imagen con `docker compose build app`. Desde `hcc-tace-lab`, descargar antes el caso y generar su candidata en la aplicación. Usar su identificador real en `AXIVOL_CANDIDATE_ID`; no escoger una máscara después de ver la referencia.
+
+```bash
+mkdir -p ../output/reference-review
+AXIVOL_CANDIDATE_ID=identificador_de_la_candidata_guardada
+docker compose run --rm --no-deps -T \
+  --volume "$PWD/../output/reference-review:/reference-output" \
+  --volume hcc-tace-lab_annotations:/annotations:ro \
+  --entrypoint python app -m experiments.prepare_reference \
+  --output /reference-output \
+  --manifest /app/experiments/manifest.example.json \
+  --case HCC_006 --candidate-id "$AXIVOL_CANDIDATE_ID"
+```
+
+El comando imprime una carpeta nueva `HCC_006-reference-…`. Contiene:
+
+- `reader/` y `reader.zip`: TC POST completa, TC PRE y `Mass` original, identificación, formulario pendiente e instrucciones. No contienen máscara, caja, corte destacado ni estadísticas de la predicción POST.
+- `manager/`: candidata congelada, soporte válido de CT, manifiesto de evaluación y copia de la identidad del paquete. No entregar al lector.
+- `preparation.json`: controles técnicos de exportación y estado pendiente. La inexistencia de una referencia no se convierte en un resultado de exactitud.
+
+La exportación relee cada NRRD y compara todos sus valores, forma, origen, espaciado y orientación. Comprueba los hashes de CT/SEG/candidata antes y después. No registra, interpola, recorta ni modifica las imágenes originales. Los archivos y el ZIP permanecen en `output/`, fuera de Git y del contexto Docker. Un ZIP sin predicción no prueba el cegamiento del lector: la exposición previa se declara separadamente.
+
+El ayudante `open_in_slicer.py` requiere 3D Slicer y una escena vacía. No borra escenas ni genera un contorno. Su API se revisó contra documentación oficial; no se ha probado gráficamente en Slicer en este equipo. La guía incluye exportación manual alternativa. Conservar la nota de operaciones del lector junto con `export.json`.
+
+### Evaluar un retorno auténtico
+
+Solo después de recibir `POST-label.nrrd` y `reader_form.json` completado por un lector cualificado. Sustituir `PAQUETE` y `RETORNO` por los nombres reales dentro de `output/reference-review`:
+
+```bash
+docker compose run --rm --no-deps -T \
+  --volume "$PWD/../output/reference-review:/review" \
+  --volume hcc-tace-lab_annotations:/annotations:ro \
+  --entrypoint python app -m experiments.evaluate_reference \
+  --manifest /review/PAQUETE/manager/evaluation_manifest.json \
+  --candidate /review/PAQUETE/manager/candidate.nrrd \
+  --reference /review/PAQUETE/reader/RETORNO/POST-label.nrrd \
+  --reader-form /review/PAQUETE/reader/RETORNO/reader_form.json \
+  --output /review/PAQUETE/comparison-reader-A.json
+```
+
+El evaluador rechaza formularios incompletos, exposición declarada a la predicción, referencia incierta, archivos sustituidos, píxeles fuera del soporte válido y retículas incompatibles. Los booleanos son declaraciones del lector, no verificación de credenciales; nunca rellenarlos ficticiamente para habilitar métricas. No acepta una máscara multicapa `.seg.nrrd`, una imagen con etiquetas distintas de 0/1 ni NRRD con datos externos.
+
+El JSON conserva fuentes, parámetros de métricas, versiones y hashes. Dice mide superposición; HD95 usa el máximo de los percentiles 95 dirigidos de distancias físicas entre centros de vóxeles de borde 6-conexo, sin ponderación de área. El volumen usa la retícula POST. Con superficies vacías, HD95 es `null`; con ambas máscaras vacías, Dice también es `null`, y se informa concordancia de ausencia separadamente. No se genera respuesta terapéutica ni una afirmación de generalización.

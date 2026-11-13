@@ -170,3 +170,9 @@ Se puede avanzar de piloto a evaluación cuando estén disponibles: manual de an
 5. Con el esfuerzo y variabilidad observados, fijar número de pacientes nuevos para prueba, criterios y presupuesto experto. Bloquear el método antes de esa prueba.
 
 La disponibilidad de estos lectores es pendiente. Hasta conseguirla se puede mejorar ingeniería y documentar fallos, pero ninguna candidata automática debe convertirse en su propia referencia.
+
+## 12. Herramientas de preparación implementadas
+
+`experiments.prepare_reference` exporta TC PRE, `Mass` publicada y TC POST en NRRD nativo. El lector recibe un borrador POST vacío mediante el ayudante de Slicer; la candidata automática queda congelada en otra carpeta, con sus hashes y procedencia. El paquete no incorpora una referencia experta. La [guía del lector](annotation-kit.md) describe objetivo, cegamiento, incertidumbre y retorno; los [comandos](../../experiments/README.md#referencia-post-independiente) explican la preparación y evaluación.
+
+`experiments.evaluate_reference` exige archivos concordantes y una declaración completa de anotación experta independiente. Verifica la retícula física y calcula Dice, HD95 (máximo de percentiles 95 dirigidos) y errores de volumen. No remuestrea ni corrige referencias, no valida credenciales y no convierte una declaración en prueba de experiencia. Sus pruebas sintéticas verifican implementación; los resultados de HCC_006 siguen pendientes de una referencia real.

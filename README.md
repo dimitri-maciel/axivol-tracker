@@ -36,6 +36,7 @@ La generación POST usa Efficient MedSAM2 tiny en CPU. Los pesos se descargan a 
 - [Matemáticas de la segmentación, geometría y métricas](hcc-tace-lab/docs/post-segmentation-math.md).
 - [Investigación POST: evidencia, modelos abiertos, experimentos y validación](hcc-tace-lab/docs/research/README.md).
 - [Guía matemática del seguimiento con ejemplos](hcc-tace-lab/docs/research/post-mathematics.md).
+- [Preparar una anotación POST independiente](hcc-tace-lab/docs/research/annotation-kit.md) y [evaluarla cuando exista](hcc-tace-lab/experiments/README.md#referencia-post-independiente).
 
 ## Estructura
 
@@ -63,7 +64,7 @@ docker compose exec -T -e HCC_PILOT_TEST=1 app python -m unittest discover -s te
 
 El caso de comprobación es **HCC_002, adquisición PRE 1, etiqueta Mass (segmento 2)**: 324 430 vóxeles y 495,04 cm³. Esta prueba verifica la lectura y medición de una máscara publicada; no evalúa el desempeño clínico ni toda la colección.
 
-Las pruebas del método asistido utilizan una región pequeña de la adquisición 1 de HCC_002 para verificar geometría, superposición y exportación; esa región no es una anotación tumoral. La prueba automática procesa la adquisición POST completa en z y verifica fuentes, máscara nativa y persistencia. Al 12 de noviembre de 2026 pasaron 134 pruebas y se comprobó la generación y visualización automática en HCC_002 y HCC_006. Los candidatos conservan el estado `unreviewed`; las medidas de respuesta permanecen sin calcular. La evidencia y sus límites están en la [guía del método](hcc-tace-lab/docs/automatic-post-segmentation.md).
+Las pruebas del método asistido utilizan una región pequeña de la adquisición 1 de HCC_002 para verificar geometría, superposición y exportación; esa región no es una anotación tumoral. La prueba automática procesa la adquisición POST completa en z y verifica fuentes, máscara nativa y persistencia. Al 12 de noviembre de 2026 pasaron 165 pruebas y se comprobó la generación y visualización automática en HCC_002 y HCC_006. Los candidatos conservan el estado `unreviewed`; las medidas de respuesta permanecen sin calcular. La evidencia y sus límites están en la [guía del método](hcc-tace-lab/docs/automatic-post-segmentation.md).
 
 ## Atribución
 

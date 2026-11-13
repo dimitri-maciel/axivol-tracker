@@ -34,7 +34,7 @@ Guarda o limpia los trazos manuales antes de refinar. El refinamiento y las nuev
 
 ## Generar una máscara POST automáticamente
 
-**Estado de la revisión, 12 de noviembre de 2026:** el protocolo `liver_context_local_medsam2`, versión `2.0.0`, está desplegado localmente. La suite con `HCC_PILOT_TEST=1` pasó 134/134 pruebas y la revisión UI real HCC_002 pasó sus ocho grupos de comprobaciones en un almacén QA aislado. La revisión UI HCC_006 también pasó sus seis comprobaciones. Para actualizar otra instalación usa `docker compose up --build -d app`; estos resultados de ingeniería no constituyen validación anatómica.
+**Estado de la revisión, 12 de noviembre de 2026:** el protocolo `liver_context_local_medsam2`, versión `2.0.0`, está desplegado localmente. La suite con `HCC_PILOT_TEST=1` pasó 165/165 pruebas y la revisión UI real HCC_002 pasó sus ocho grupos de comprobaciones en un almacén QA aislado. La revisión UI HCC_006 también pasó sus seis comprobaciones. Para actualizar otra instalación usa `docker compose up --build -d app`; estos resultados de ingeniería no constituyen validación anatómica.
 
 Selecciona las adquisiciones PRE y POST en **Study details**, y el segmento publicado `Mass` en **Segmentation**. Abre **Follow-up mask**, comprueba la referencia **Baseline reference** y pulsa **Generate automatically**. Se exige una única etiqueta `Liver` publicada y no vacía para el contexto anatómico. El proceso usa los segmentos originales incluso si el visor PRE muestra una copia editada o refinada.
 
