@@ -18,6 +18,7 @@ RUN python /tmp/model_assets.py install-config && rm /tmp/model_assets.py
 COPY hcclab ./hcclab
 COPY web ./web
 COPY tests ./tests
+COPY experiments ./experiments
 RUN useradd --system --uid 10001 --no-create-home lab \
     && mkdir /annotations && chown lab:lab /annotations
 USER lab

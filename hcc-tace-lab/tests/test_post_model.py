@@ -1,5 +1,7 @@
 """No weights needed: verify native geometry and propagation orchestration."""
 from contextlib import nullcontext
+import copy
+import json
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -45,6 +47,27 @@ class Predictor:
         for index in indices:
             if not (self.incomplete and index == 0):
                 yield index, [1], self.logits(state)
+
+
+class FieldPredictor(Predictor):
+    """Captura la retícula de entrada sin cargar Torch ni pesos."""
+    def __init__(self, edge=None):
+        super().__init__()
+        self.edge = edge
+        self.frames = None
+        self.received_shapes = []
+
+    def init_state(self, frames, height, width):
+        self.frames = frames
+        self.received_shapes.append((height, width))
+        return super().init_state(frames, height, width)
+
+    def logits(self, state):
+        if self.edge is None:
+            return super().logits(state)
+        plane = np.full(state['shape'], -1, dtype=np.float32)
+        plane[self.edge] = 1
+        return [Tensor(plane[None])]
 
 
 class PostModelTests(unittest.TestCase):
@@ -145,6 +168,88 @@ class PostModelTests(unittest.TestCase):
         self.assertEqual(caught.exception.diagnostics['error_type'], 'RuntimeError')
         self.assertNotIn('/private', str(caught.exception))
         self.assertTrue(self.run_model(Predictor())[0].any())
+
+    def crop_fixture(self):
+        self.hu = np.arange(7*220*260, dtype=np.float32).reshape(7, 220, 260)
+        self.location = {'post_center_zyx': [3,130,155],
+                         'localized_box_zyx': [[2,125,150],[5,136,161]],
+                         'roi_zyx': [[0,0,0],[7,220,260]]}
+
+    def run_crop_model(self, predictor, **kwargs):
+        fake_torch = SimpleNamespace(__version__='test', inference_mode=nullcontext)
+        with patch('hcclab.post_model._get_predictor', return_value=(predictor, fake_torch, {'checkpoint':'test'})), \
+             patch('hcclab.post_model.version', return_value='test'):
+            return segment_post_model(self.hu, [2.5,1,2], self.location, checkpoint_path='/unused', **kwargs)
+
+    def test_anisotropic_crop_offsets_boxes_padding_and_all_native_slices(self):
+        self.crop_fixture()
+        predictor = FieldPredictor()
+        valid = np.ones(self.hu.shape, bool); valid[:,52,118] = False
+        original_hu, original_valid = self.hu.copy(), valid.copy()
+        original_location = copy.deepcopy(self.location)
+        mask, info = self.run_crop_model(predictor, valid_mask=valid)
+        # 160 mm becomes 160 rows at dy=1 and 80 columns at dx=2.
+        self.assertEqual(predictor.received_shapes, [(160,80), (160,80)])
+        self.assertEqual(info['inference_field_yx'], [[50,115],[210,195]])
+        self.assertEqual(info['inference_field_shape_yx'], [160,80])
+        np.testing.assert_array_equal(predictor.frames.hu, self.hu[:,50:210,115:195])
+        np.testing.assert_array_equal(predictor.frames.valid, valid[:,50:210,115:195])
+        self.assertEqual(info['prompt_box_xyxy'], [150,125,160,135])
+        self.assertEqual(info['model_prompt_box_xyxy'], [35,75,45,85])
+        np.testing.assert_array_equal(predictor.box, [35,75,45,85])
+        expected = np.zeros(self.hu.shape, bool)
+        expected[:,52:54,118:120] = True
+        expected &= valid
+        np.testing.assert_array_equal(mask, expected)
+        self.assertTrue(mask[0].any() and mask[-1].any())
+        self.assertEqual(info['voxels'], 21)
+        self.assertEqual(info['excluded_padding_voxels'], 7)
+        self.assertEqual(info['outside_inference_field'], 'not_assessed')
+        self.assertEqual(info['internal_field_touch_faces'], [])
+        np.testing.assert_array_equal(self.hu, original_hu)
+        np.testing.assert_array_equal(valid, original_valid)
+        self.assertEqual(self.location, original_location)
+        self.assertFalse(np.shares_memory(mask, self.hu))
+        json.dumps(info, allow_nan=False)
+
+    def test_internal_crop_edges_abstain_without_saving_truncated_mask_or_lock_leak(self):
+        self.crop_fixture()
+        for edge, face in (((0,4),'y_min'), ((-1,4),'y_max'), ((3,0),'x_min'), ((3,-1),'x_max')):
+            with self.subTest(face=face):
+                predictor = FieldPredictor(edge)
+                with self.assertRaises(ModelSegmentationError) as caught:
+                    self.run_crop_model(predictor)
+                info = caught.exception.diagnostics
+                self.assertEqual(info['reason'], 'incomplete_input_field')
+                self.assertEqual(info['internal_field_touch_faces'], [face])
+                self.assertEqual(predictor.reset_count, 2)
+                self.assertNotIn('voxels', info)
+        self.assertTrue(self.run_crop_model(FieldPredictor())[0].any())
+
+    def test_native_acquisition_edge_is_warning_not_artificial_field_failure(self):
+        self.crop_fixture()
+        self.location['post_center_zyx'][1] = 5
+        self.location['localized_box_zyx'] = [[2,1,150],[5,11,161]]
+        mask, info = self.run_crop_model(FieldPredictor((0,4)))
+        self.assertTrue(mask[:,0].any())
+        self.assertEqual(info['internal_field_touch_faces'], [])
+        self.assertIn('y_min', info['acquisition_touch_faces'])
+        self.assertEqual(info['status'], 'candidate_unreviewed')
+
+    def test_invalid_field_center_or_boolean_bounds_rejected_before_model_load(self):
+        self.crop_fixture()
+        original = copy.deepcopy(self.location)
+        for change in ('outside_xy_center', 'boolean_bound'):
+            with self.subTest(change=change), patch('hcclab.post_model._get_predictor') as load:
+                self.location = copy.deepcopy(original)
+                if change == 'outside_xy_center':
+                    self.location['post_center_zyx'][1] = 140
+                else:
+                    self.location['localized_box_zyx'][0][0] = True
+                with self.assertRaises(ModelSegmentationError) as caught:
+                    segment_post_model(self.hu, [2.5,1,2], self.location, checkpoint_path='/unused')
+                self.assertEqual(caught.exception.diagnostics['reason'], 'invalid_input_field')
+                load.assert_not_called()
 
 
 if __name__ == '__main__':

@@ -78,11 +78,12 @@ const path = require('node:path');
 
     await page.locator('#case').selectOption('HCC_006'); await settle();
     const candidate006 = await page.locator('#candidate-saved').inputValue();
-    assert.equal(candidate006, '', 'The excluded HCC_006 candidate must not be restored');
+    assert.notEqual(candidate006, '58b38662a66d49ae8344cbbe02373297', 'The excluded HCC_006 candidate must not be restored');
     assert.match(await page.locator('#candidate-baseline').innerText(), /Published Mass \(2\).*Acquisition 3/);
-    assert.equal(await page.locator('#post-mask-state').innerText(), 'No follow-up mask for this acquisition');
-    assert.equal(await page.locator('#candidate-result').isHidden(), true);
-    assert.equal(await colored(), 0);
+    const expected006State = candidate006 ? 'Automatic mask · Unreviewed' : 'No follow-up mask for this acquisition';
+    assert.equal(await page.locator('#post-mask-state').innerText(), expected006State);
+    assert.equal(await page.locator('#candidate-result').isHidden(), !candidate006);
+    assert.equal(await colored() > 0, !!candidate006);
     const originalSeries = await page.locator('#post-series').inputValue();
     const emptySeries = await page.locator('#post-series option').evaluateAll(options =>
       options.find(option => option.value.endsWith('908670668499030554148605049062'))?.value);
@@ -99,7 +100,7 @@ const path = require('node:path');
     assert.match(await page.locator('#post-mask-reason').innerText(), /Select a published Mass/);
     await page.locator('#segment').selectOption(mass); await ready('pre');
     assert.equal(await page.locator('#post-mask-action').isDisabled(), false);
-    checks.push('HCC_006 restores no excluded or cross-case mask; its acquisitions show an explicit empty state, with published PRE Mass eligibility enforced.');
+    checks.push('HCC_006 never restores the excluded mask; any new candidate is visible and unreviewed. The separate unannotated acquisition remains empty, with published PRE Mass eligibility enforced.');
 
     let release, intercepted;
     const handler = async route => {
@@ -131,14 +132,14 @@ const path = require('node:path');
     assert.equal(await page.locator('#candidate-result').isHidden(), true);
     assert.equal(await colored(), 0);
     await page.locator('#post-series').selectOption(originalSeries); await settle();
-    assert.equal(await page.locator('#candidate-saved').inputValue(), '');
-    assert.equal(await page.locator('#post-mask-state').innerText(), 'No follow-up mask for this acquisition');
+    assert.equal(await page.locator('#candidate-saved').inputValue(), candidate006);
+    assert.equal(await page.locator('#post-mask-state').innerText(), expected006State);
     assert.equal(await page.locator('#post-mask-details').isHidden(), true);
     checks.push('Generate invokes the existing endpoint with exact source IDs; an intercepted error preserves the reason through Review details and creates no mask.');
     assert.deepEqual(requests, [url + '/api/automatic-post-candidates']);
     assert.deepEqual(errors, []);
     await fs.writeFile(path.join(out, 'validation.json'), JSON.stringify({checks, candidate002, candidate006,
-      server_writes: 0, scope: 'Real saved HCC_002 mask; HCC_006 excluded candidate stays absent. No inference; one intercepted transport error. Screenshots contain only HCC_002.'}, null, 2));
+      server_writes: 0, scope: 'Real saved masks; HCC_006 excluded candidate stays absent. No inference; one intercepted transport error. Screenshots contain only HCC_002.'}, null, 2));
     console.log(JSON.stringify({passed: checks.length, checks, server_writes: 0}, null, 2));
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exit(1); });

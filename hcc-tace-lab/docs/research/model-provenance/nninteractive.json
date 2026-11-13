@@ -1,0 +1,77 @@
+{
+  "intended_use": "research",
+  "evaluation_arms": [
+    {
+      "name": "engineering demonstration only; no reference POST segmentation",
+      "dataset": "HCC-TACE-Seg"
+    }
+  ],
+  "task": {
+    "model": "3d_ct_segmentation",
+    "study": "3d_ct_segmentation"
+  },
+  "model": "nnInteractive v1.0, official 192-cube configuration",
+  "source": {
+    "kind": "github",
+    "url": "https://github.com/MIC-DKFZ/nnInteractive",
+    "commit": "e3126a029f46dcfd798c8428eec292f52cd438d6"
+  },
+  "licence": {
+    "spdx": "Apache-2.0 AND CC-BY-NC-SA-4.0",
+    "verified_from": "Code LICENSE at pinned commit; HF nnInteractive_v1.0/LICENSE at 3f308d751c00644e4fde6f09c600264b393b21b5"
+  },
+  "weights": {
+    "pretrained": true,
+    "url": "https://huggingface.co/MIC-DKFZ/nnInteractive",
+    "revision": "3f308d751c00644e4fde6f09c600264b393b21b5",
+    "file": "nnInteractive_v1.0/fold_0/checkpoint_final.pth",
+    "bytes": 411387150,
+    "sha256": "b3ac4421f85457bbd1aa0d87f5e67bcb7bc8e2ce6b824b6ac45077cc5d630ea9",
+    "digest_verified_locally": true,
+    "training_provenance_note": "Authors describe 120+ datasets; exact training/development manifest for this artifact not established."
+  },
+  "hardware": {
+    "claimed": "CPU supported by source",
+    "verified_on": "Linux aarch64, torch2.5.1,2threads,7GiB container limit; global HCC006 box completed;6GiB OOM",
+    "verified": true
+  },
+  "limitations": [
+    "No POST reference; no accuracy claim.",
+    "Cannot assert HCC-TACE is independent of model development/training."
+  ],
+  "local_experiments": [
+    {
+      "variant": "previous_global_body",
+      "case_id": "HCC_006",
+      "post_acquisition": "1",
+      "shape_zyx": [
+        103,
+        512,
+        512
+      ],
+      "voxels": 6975,
+      "volume_cm3": 10.64300537109375,
+      "outside_localization_roi_fraction": 0.0,
+      "total_seconds": 242.64949836100277,
+      "process_peak_rss_mib": 6365.54296875,
+      "components_6": 1
+    },
+    {
+      "variant": "liver",
+      "case_id": "HCC_006",
+      "post_acquisition": "1",
+      "shape_zyx": [
+        103,
+        512,
+        512
+      ],
+      "voxels": 15226,
+      "volume_cm3": 23.2330322265625,
+      "outside_localization_roi_fraction": 0.2537764350453172,
+      "total_seconds": 245.89708878000238,
+      "process_peak_rss_mib": 6318.20703125,
+      "components_6": 1
+    }
+  ],
+  "local_experiments_note": "Exploratory outputs; historical PRE registration supplied the box. Source CT was verified by loader; per-file before/after hashing was added only to the later TotalSegmentator experiments."
+}

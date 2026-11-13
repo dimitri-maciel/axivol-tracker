@@ -1,0 +1,57 @@
+{
+  "intended_use": "research",
+  "evaluation_arms": [
+    {
+      "name": "engineering demonstration only; no reference POST segmentation",
+      "dataset": "HCC-TACE-Seg"
+    }
+  ],
+  "task": {
+    "model": "3d_ct_segmentation",
+    "study": "3d_ct_segmentation"
+  },
+  "model": "LesionLocator official 2025 archive",
+  "source": {
+    "kind": "github",
+    "url": "https://github.com/MIC-DKFZ/LesionLocator",
+    "commit": "ef073baaa0dcba8dd036ec5a29f130db18c9d580"
+  },
+  "licence": {
+    "spdx": "GPL-3.0 AND CC-BY-NC-SA-4.0",
+    "verified_from": "Code LICENSE at commit; weight LICENSE in Zenodo record15174217 preview"
+  },
+  "weights": {
+    "pretrained": true,
+    "url": "https://zenodo.org/records/15174217",
+    "file": "LesionLocatorModel.zip",
+    "bytes": 14073990099,
+    "published_md5": "1f9b8a64703346df9bcc532a0a32a07b",
+    "downloaded": false,
+    "training_provenance_note": "Paper reports multiple pretraining and16 fine-tuning datasets; archive-wide exact split mapping was not established."
+  },
+  "developed_on": [
+    "HCC-TACE-Seg",
+    "Private whole-body melanoma longitudinal cohort"
+  ],
+  "reported_validation": [
+    {
+      "dataset": "HCC-TACE-Seg",
+      "metric": "Dice/NSD, single-timepoint held-out segmentation;66images",
+      "source": "https://arxiv.org/abs/2502.20985v1"
+    },
+    {
+      "dataset": "Private whole-body melanoma longitudinal cohort",
+      "metric": "Longitudinal five-fold CV;159studies",
+      "source": "https://arxiv.org/abs/2502.20985v1"
+    }
+  ],
+  "hardware": {
+    "claimed": "CPU and MPS flags in CLI",
+    "verified": false
+  },
+  "limitations": [
+    "HCC-TACE was used in published benchmark development/evaluation; not a novel independent benchmark here.",
+    "No public POST-TACE expert labels established.",
+    "Not downloaded; estimated resource mismatch based on upstream benchmark, not local run."
+  ]
+}

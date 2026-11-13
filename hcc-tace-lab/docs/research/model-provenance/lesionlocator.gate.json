@@ -1,0 +1,35 @@
+{
+ "detector": "check_model_provenance",
+ "dossier": "hcc-tace-lab/docs/research/model-provenance/lesionlocator.json",
+ "model": "LesionLocator official 2025 archive",
+ "n_arms": 1,
+ "claims": [
+  {
+   "verdict": "BENCHMARK_PROVENANCE_CONFLICT",
+   "severity": "Major",
+   "detail": "an evaluation arm uses a dataset the model was developed or tuned on; that arm does not independently test the model, no matter how held-out the split is for you. Report it as a demonstration of the pipeline and put the evidence on an arm whose data post-dates the model",
+   "where": [
+    "engineering demonstration only; no reference POST segmentation (HCC-TACE-Seg) <- developed on HCC-TACE-Seg"
+   ],
+   "n_where": 1
+  },
+  {
+   "verdict": "WEIGHTS_PROVENANCE_UNKNOWN",
+   "severity": "Major",
+   "detail": "pretrained weights are used and the corpus behind them is not stated, so it cannot be established whether your evaluation data is inside them",
+   "where": [],
+   "n_where": 0
+  },
+  {
+   "verdict": "HARDWARE_UNVERIFIED",
+   "severity": "Minor",
+   "detail": "hardware support is claimed ('CPU and MPS flags in CLI') but never executed; support matrices and what the stack actually runs on are different statements",
+   "where": [],
+   "n_where": 0
+  }
+ ],
+ "summary": {
+  "major": 2,
+  "minor": 1
+ }
+}

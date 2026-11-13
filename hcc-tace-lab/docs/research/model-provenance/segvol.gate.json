@@ -1,0 +1,40 @@
+{
+ "detector": "check_model_provenance",
+ "dossier": "hcc-tace-lab/docs/research/model-provenance/segvol.json",
+ "model": "SegVol HF artifact",
+ "n_arms": 1,
+ "claims": [
+  {
+   "verdict": "DEVELOPED_ON_UNSTATED",
+   "severity": "Major",
+   "detail": "no 'developed_on' recorded, so whether an evaluation arm reuses the model's own development benchmark could not be checked; record the paper's account of where the method was built and tuned (an empty list states it was none)",
+   "where": [],
+   "n_where": 0
+  },
+  {
+   "verdict": "WEIGHTS_PROVENANCE_UNKNOWN",
+   "severity": "Major",
+   "detail": "pretrained weights are used and the corpus behind them is not stated, so it cannot be established whether your evaluation data is inside them",
+   "where": [],
+   "n_where": 0
+  },
+  {
+   "verdict": "LICENCE_UNSTATED",
+   "severity": "Major",
+   "detail": "no licence recorded. An unstated licence is not a permissive one \u2014 it is an unanswered question about whether the work may be used or redistributed at all",
+   "where": [],
+   "n_where": 0
+  },
+  {
+   "verdict": "VALIDATION_UNREPORTED",
+   "severity": "Minor",
+   "detail": "no reported validation (dataset + metric + source) recorded for the model as published; there is then no prior expectation to compare your own numbers against",
+   "where": [],
+   "n_where": 0
+  }
+ ],
+ "summary": {
+  "major": 3,
+  "minor": 1
+ }
+}

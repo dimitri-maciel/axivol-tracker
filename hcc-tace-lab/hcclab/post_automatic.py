@@ -10,7 +10,7 @@ Ningún camino devuelve una máscara PRE transferida ni demuestra exactitud.
 import numpy as np
 
 from .geometry import GeometryError
-from .registration import localize_pre_region, register_pre_to_post
+from .registration import localize_pre_region, register_pre_to_post, refine_pre_to_post
 from .segmentation import grow_region
 
 
@@ -102,7 +102,7 @@ def segment_from_location(post_hu, spacing_zyx, location, *, valid_mask=None):
 
 
 def automatic_post_candidate(pre_hu, post_hu, pre_mask, pre_stack, post_stack, *,
-                             pre_valid=None, post_valid=None, model_path=None):
+                             pre_valid=None, post_valid=None, model_path=None, pre_context_mask=None):
     """Devuelve (máscara POST, diagnósticos) o AutomaticSegmentationError.
 
     El error conserva registro/localización/criterio de abstención para
@@ -114,6 +114,18 @@ def automatic_post_candidate(pre_hu, post_hu, pre_mask, pre_stack, post_stack, *
     except GeometryError as error:
         raise AutomaticSegmentationError(str(error), {'registration': {'status': 'failed', 'reason': str(error)},
                                                        'segmentation': {'status': 'not_started'}}) from error
+    if pre_context_mask is not None:
+        global_registration = registration
+        try:
+            transform, registration = refine_pre_to_post(
+                pre_hu, post_hu, pre_context_mask, pre_stack, post_stack, transform,
+                pre_valid=pre_valid, post_valid=post_valid)
+        except GeometryError as error:
+            raise AutomaticSegmentationError(str(error), {
+                'registration': {'status': 'failed', 'stage': 'PRE_context_refinement',
+                                 'reason': str(error), 'global_registration': global_registration},
+                'segmentation': {'status': 'not_started'}}) from error
+        registration['global_registration'] = global_registration
     try:
         location = localize_pre_region(pre_mask, pre_stack, post_stack, transform)
     except GeometryError as error:

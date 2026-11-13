@@ -1,0 +1,65 @@
+{
+  "intended_use": "research",
+  "evaluation_arms": [
+    {
+      "name": "engineering demonstration only; no reference POST segmentation",
+      "dataset": "HCC-TACE-Seg"
+    }
+  ],
+  "task": {
+    "model": "3d_ct_anatomical_segmentation",
+    "study": "3d_ct_lesion_segmentation"
+  },
+  "model": "TotalSegmentator total fast, tasks297/298",
+  "source": {
+    "kind": "github",
+    "url": "https://github.com/wasserth/TotalSegmentator",
+    "commit": "d89e47f73d24f5fba732a715aeb6fdc0ae34526b"
+  },
+  "licence": {
+    "spdx": "Apache-2.0",
+    "verified_from": "Code LICENSE at pinned commit; README explicitly identifies total as Apache-2.0, weight ZIP has no separate license"
+  },
+  "weights": {
+    "pretrained": true,
+    "url": "https://github.com/wasserth/TotalSegmentator/releases/tag/v2.0.0-weights",
+    "tasks": [
+      297,
+      298
+    ],
+    "training_provenance_note": "Folder names reference1559subjects; exact train/validation identity manifest and HCC-TACE overlap were not established.",
+    "archives": [
+      {
+        "url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.0.0-weights/Dataset297_TotalSegmentator_total_3mm_1559subj.zip",
+        "path": "Dataset297_TotalSegmentator_total_3mm_1559subj.zip",
+        "bytes": 135386075,
+        "sha256": "0baa2c8de2975600eb31801dd5c1825cd2b356f794498659cf3348714c073394",
+        "published_sha256": null
+      },
+      {
+        "url": "https://github.com/wasserth/TotalSegmentator/releases/download/v2.0.0-weights/Dataset298_TotalSegmentator_total_6mm_1559subj.zip",
+        "path": "Dataset298_TotalSegmentator_total_6mm_1559subj.zip",
+        "bytes": 134827240,
+        "sha256": "b1832acde46c0f76cc9aba599e49e986c21c94e522ade4d920602b227e9d6c63",
+        "published_sha256": null
+      }
+    ]
+  },
+  "hardware": {
+    "claimed": "CPU fast mode supported",
+    "verified": true,
+    "verified_on": "Linux aarch64,torch2.5.1,CPU quota2,upstream10threads,6GiB container limit,130.74s inference,4226.12MiB peakRSS"
+  },
+  "limitations": [
+    "Used only as anatomical context, not a lesion model or reference mask.",
+    "Task mismatch finding is intentional."
+  ],
+  "local_experiment": {
+    "case_id": "HCC_006",
+    "post_acquisition": "1",
+    "source_unchanged": true,
+    "geometry_returned_to_native": true,
+    "inference_seconds": 130.74202160099958,
+    "peak_rss_mib": 4226.1171875
+  }
+}

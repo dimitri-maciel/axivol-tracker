@@ -121,6 +121,37 @@ class AutomaticPostTests(unittest.TestCase):
         self.assertEqual(captured.exception.diagnostics['registration']['parameters'], [0]*6)
         self.assertEqual(captured.exception.diagnostics['segmentation']['status'], 'not_started')
 
+    def test_context_refines_localization_but_never_becomes_model_input(self):
+        stack = Mock(interval_mm=2, slices=[Mock(spacing=(1, 1))])
+        context = np.ones_like(self.hu, dtype=bool)
+        initial, refined = object(), object()
+        with patch('hcclab.post_automatic.register_pre_to_post', return_value=(initial, {'status': 'estimated_unverified'})), \
+                patch('hcclab.post_automatic.refine_pre_to_post', return_value=(refined, {'status': 'estimated_unverified'})) as refine, \
+                patch('hcclab.post_automatic.localize_pre_region', return_value=self.location) as locate, \
+                patch('hcclab.post_model.segment_post_model', return_value=(self.truth, {'voxels': int(self.truth.sum())})) as model:
+            result, info = automatic_post_candidate(self.hu, self.hu, self.truth, stack, stack,
+                                                    pre_context_mask=context, model_path=Path('model.pt'))
+            self.assertIs(refine.call_args.args[2], context)
+            self.assertIs(refine.call_args.args[5], initial)
+            self.assertIs(locate.call_args.args[3], refined)
+            self.assertEqual(len(model.call_args.args), 3)
+            self.assertIs(model.call_args.args[0], self.hu)
+            self.assertIs(model.call_args.args[2], self.location)
+            self.assertNotIn('pre_context_mask', model.call_args.kwargs)
+            self.assertIs(result, self.truth)
+            self.assertIn('global_registration', info['registration'])
+
+    def test_failed_context_refinement_does_not_silently_use_global_registration(self):
+        with patch('hcclab.post_automatic.register_pre_to_post', return_value=(None, {'parameters': [0]*6})), \
+                patch('hcclab.post_automatic.refine_pre_to_post', side_effect=GeometryError('Invalid context.')), \
+                patch('hcclab.post_automatic.localize_pre_region') as locate:
+            with self.assertRaises(AutomaticSegmentationError) as caught:
+                automatic_post_candidate(None, None, None, None, None, pre_context_mask=self.truth)
+            self.assertEqual(caught.exception.diagnostics['registration']['stage'], 'PRE_context_refinement')
+            self.assertEqual(caught.exception.diagnostics['registration']['global_registration']['parameters'], [0]*6)
+            self.assertEqual(caught.exception.diagnostics['segmentation']['status'], 'not_started')
+            locate.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

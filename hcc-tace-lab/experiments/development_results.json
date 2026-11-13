@@ -1,0 +1,481 @@
+{
+  "scope": "Engineering ablation; no independent POST ground truth.",
+  "all_runs": [
+    {
+      "case": "HCC_006",
+      "variant": "full",
+      "voxels": 184806,
+      "outside_roi_fraction": 0.90883953984178,
+      "z_bounds": [
+        4,
+        59
+      ],
+      "max_slice": 32,
+      "crop_boundary_contact_pixels": 0,
+      "seconds": 51.63664310600143,
+      "high_hu_in_common_localized_box": {
+        "240": {
+          "inside_prediction": 378,
+          "outside_prediction": 4036,
+          "all": 4414
+        },
+        "600": {
+          "inside_prediction": 29,
+          "outside_prediction": 2867,
+          "all": 2896
+        }
+      },
+      "artifact_sha256": "ec9d8cd5994f82111ac02d30bef6166bad95b4859c3202fa8692e283aa830d76"
+    },
+    {
+      "case": "HCC_006",
+      "variant": "local160",
+      "voxels": 17167,
+      "outside_roi_fraction": 0.0,
+      "z_bounds": [
+        46,
+        61
+      ],
+      "max_slice": 55,
+      "crop_boundary_contact_pixels": 0,
+      "seconds": 52.49230894199718,
+      "high_hu_in_common_localized_box": {
+        "240": {
+          "inside_prediction": 8,
+          "outside_prediction": 4406,
+          "all": 4414
+        },
+        "600": {
+          "inside_prediction": 0,
+          "outside_prediction": 2896,
+          "all": 2896
+        }
+      },
+      "artifact_sha256": "b9b876da1ee52a73408f3b2edff948f3efc4165672d1195ba22a0e95fe44696f"
+    },
+    {
+      "case": "HCC_006",
+      "variant": "local160liver",
+      "voxels": 11485,
+      "outside_roi_fraction": 0.0,
+      "z_bounds": [
+        49,
+        64
+      ],
+      "max_slice": 58,
+      "crop_boundary_contact_pixels": 0,
+      "seconds": 55.668317900002876,
+      "high_hu_in_common_localized_box": {
+        "240": {
+          "inside_prediction": 4150,
+          "outside_prediction": 264,
+          "all": 4414
+        },
+        "600": {
+          "inside_prediction": 2818,
+          "outside_prediction": 78,
+          "all": 2896
+        }
+      },
+      "artifact_sha256": "d1d66b9acb41fae5ee5f11ee3dc59dd0a8eb253f4acca7ac9304046088f3b69f"
+    },
+    {
+      "case": "HCC_006",
+      "variant": "local160wide",
+      "voxels": 177974,
+      "outside_roi_fraction": 0.8979457673592772,
+      "z_bounds": [
+        3,
+        61
+      ],
+      "max_slice": 33,
+      "crop_boundary_contact_pixels": 0,
+      "seconds": 55.03802215000178,
+      "high_hu_in_common_localized_box": {
+        "240": {
+          "inside_prediction": 191,
+          "outside_prediction": 4223,
+          "all": 4414
+        },
+        "600": {
+          "inside_prediction": 0,
+          "outside_prediction": 2896,
+          "all": 2896
+        }
+      },
+      "artifact_sha256": "9b3ca655ba45ed5347ea493f76d5ef5697a740e8d460c94e9b002c8e91d0fe5e"
+    },
+    {
+      "case": "HCC_006",
+      "variant": "local240",
+      "voxels": 24492,
+      "outside_roi_fraction": 0.2672301159562306,
+      "z_bounds": [
+        43,
+        63
+      ],
+      "max_slice": 43,
+      "crop_boundary_contact_pixels": 0,
+      "seconds": 55.224928399999044,
+      "high_hu_in_common_localized_box": {
+        "240": {
+          "inside_prediction": 29,
+          "outside_prediction": 4385,
+          "all": 4414
+        },
+        "600": {
+          "inside_prediction": 0,
+          "outside_prediction": 2896,
+          "all": 2896
+        }
+      },
+      "artifact_sha256": "55cd532fb7ad659c3784cbd3fc1fd9eb26c65c0e632733a74941c7246fd344ad"
+    },
+    {
+      "case": "HCC_002",
+      "variant": "local160",
+      "voxels": 360865,
+      "outside_roi_fraction": 0.0,
+      "z_bounds": [
+        44,
+        87
+      ],
+      "max_slice": 61,
+      "crop_boundary_contact_pixels": 0,
+      "seconds": 50.69100518900086,
+      "high_hu_in_common_localized_box": {
+        "240": {
+          "inside_prediction": 4138,
+          "outside_prediction": 30703,
+          "all": 34841
+        },
+        "600": {
+          "inside_prediction": 88,
+          "outside_prediction": 5573,
+          "all": 5661
+        }
+      },
+      "artifact_sha256": "beafce9c495ab4e128960e64927b04209637bc602baf47a22b1c0fb5e9d6d710"
+    }
+  ],
+  "pairwise_prediction_consistency": [
+    {
+      "case": "HCC_006",
+      "a": "full",
+      "b": "local160",
+      "dice_prediction_consistency": 0.11358944017269636,
+      "iou_prediction_consistency": 0.060214590922929946,
+      "intersection_voxels": 11471,
+      "union_voxels": 190502,
+      "not_accuracy": true
+    },
+    {
+      "case": "HCC_006",
+      "a": "full",
+      "b": "local160liver",
+      "dice_prediction_consistency": 0.018075204670616584,
+      "iou_prediction_consistency": 0.009120025499056638,
+      "intersection_voxels": 1774,
+      "union_voxels": 194517,
+      "not_accuracy": true
+    },
+    {
+      "case": "HCC_006",
+      "a": "full",
+      "b": "local160wide",
+      "dice_prediction_consistency": 0.940079386956282,
+      "iou_prediction_consistency": 0.886933771630977,
+      "intersection_voxels": 170521,
+      "union_voxels": 192259,
+      "not_accuracy": true
+    },
+    {
+      "case": "HCC_006",
+      "a": "full",
+      "b": "local240",
+      "dice_prediction_consistency": 0.18504715764125793,
+      "iou_prediction_consistency": 0.10195700589155123,
+      "intersection_voxels": 19365,
+      "union_voxels": 189933,
+      "not_accuracy": true
+    },
+    {
+      "case": "HCC_006",
+      "a": "local160",
+      "b": "local160liver",
+      "dice_prediction_consistency": 0.0859276839313137,
+      "iou_prediction_consistency": 0.044892600561613365,
+      "intersection_voxels": 1231,
+      "union_voxels": 27421,
+      "not_accuracy": true
+    },
+    {
+      "case": "HCC_006",
+      "a": "local160",
+      "b": "local160wide",
+      "dice_prediction_consistency": 0.13785929148666862,
+      "iou_prediction_consistency": 0.07403269304859926,
+      "intersection_voxels": 13451,
+      "union_voxels": 181690,
+      "not_accuracy": true
+    },
+    {
+      "case": "HCC_006",
+      "a": "local160",
+      "b": "local240",
+      "dice_prediction_consistency": 0.5963177224609328,
+      "iou_prediction_consistency": 0.4248238593611054,
+      "intersection_voxels": 12421,
+      "union_voxels": 29238,
+      "not_accuracy": true
+    },
+    {
+      "case": "HCC_006",
+      "a": "local160liver",
+      "b": "local160wide",
+      "dice_prediction_consistency": 0.019497622176829814,
+      "iou_prediction_consistency": 0.00984478604780078,
+      "intersection_voxels": 1847,
+      "union_voxels": 187612,
+      "not_accuracy": true
+    },
+    {
+      "case": "HCC_006",
+      "a": "local160liver",
+      "b": "local240",
+      "dice_prediction_consistency": 0.08716680101175751,
+      "iou_prediction_consistency": 0.045569473102967245,
+      "intersection_voxels": 1568,
+      "union_voxels": 34409,
+      "not_accuracy": true
+    },
+    {
+      "case": "HCC_006",
+      "a": "local160wide",
+      "b": "local240",
+      "dice_prediction_consistency": 0.20375766795412564,
+      "iou_prediction_consistency": 0.11343551163391792,
+      "intersection_voxels": 20627,
+      "union_voxels": 181839,
+      "not_accuracy": true
+    },
+    {
+      "case": "HCC_002",
+      "a": "local160",
+      "b": "saved_full",
+      "dice_prediction_consistency": 0.8618619811383986,
+      "iou_prediction_consistency": 0.7572561208353782,
+      "intersection_voxels": 347183,
+      "union_voxels": 458475,
+      "not_accuracy": true
+    }
+  ],
+  "execution_origin": "Temporary controlled pilot scripts before extraction of the versioned runner; not a completed batch from the new CLI.",
+  "legacy_experiment_script_sha256": "bf436f11caf80c8990dcdf7b343ec251976ff0055e28b6ef67397a50846c45d5",
+  "independent_post_reference": false,
+  "cases_are_development": true,
+  "cli_reproductions": [
+    {
+      "run_id": "run-20261113T014341-0c046bff",
+      "case": "HCC_006",
+      "variant": "local160liver",
+      "selection": {
+        "pre_series_uid": "1.3.6.1.4.1.14519.5.2.1.1706.8374.169644075146766664505907245033",
+        "post_series_uid": "1.3.6.1.4.1.14519.5.2.1.1706.8374.282486593875087229522187699711",
+        "pre_acquisition": "3",
+        "post_acquisition": "1",
+        "mass_segment": 2,
+        "liver_segment": 1
+      },
+      "sources": "Original CT and SEG; no stored candidate",
+      "status": "completed",
+      "metrics": {
+        "voxels": 11120,
+        "inside_search_roi_voxels": 11120,
+        "outside_search_roi_voxels": 0,
+        "outside_fraction": 0.0,
+        "majority_outside_roi": false,
+        "centroid_zyx": [
+          57.278687050359714,
+          330.74739208633093,
+          197.52347122302157
+        ],
+        "max_area_slice_index": 58,
+        "z_bounds_inclusive": [
+          49,
+          64
+        ],
+        "components_6": 1,
+        "largest_component_voxels": 11120,
+        "scope": "Prediction descriptors, not anatomical accuracy or treatment response."
+      },
+      "inference_seconds": 50.830433023002115,
+      "artifact_sha256": "e35324592513a25eb1c19a375b44a7ae56675e427aaa40238adc3555fd3f147d",
+      "report_sha256": "5354029a4d71cdb6ebcb00473ba19489af66741f982ea4238e87a8ad6e6838fd",
+      "manifest_sha256": "16c0354040f35e59a2954c7b61d619063cef3fd7e4ad958eb0865d328590f892",
+      "global_center_zyx": [
+        55.709002551997045,
+        323.416407829286,
+        183.94155452882282
+      ],
+      "refined_center_zyx": [
+        59.14706853193252,
+        337.5636304970445,
+        197.93019899288424
+      ],
+      "scope": "One extracted CLI run with recalculated registration, not a rerun of all frozen-registration pilots or anatomical accuracy evaluation."
+    }
+  ],
+  "original_pre_intensity_audit": {
+    "case": "HCC_006",
+    "pre_acquisition": "3",
+    "post_acquisition": "1",
+    "source_segments": {
+      "mass": 2,
+      "liver": 1
+    },
+    "pre_display_slice_zero_based": 71,
+    "pre_original_mass_hu": {
+      "voxels": 8404,
+      "min_hu": -42.0,
+      "mean_hu": 90.55413818359375,
+      "median_hu": 91.0,
+      "p95_hu": 139.85000610351562,
+      "p99_hu": 162.0,
+      "max_hu": 219.0,
+      "above240_hu": 0,
+      "above600_hu": 0
+    },
+    "pre_mass_liver_intersection_voxels": 0,
+    "scope": "Intensity descriptors only. No identification of material, tissue viability or treatment response.",
+    "source_seg_sha256": "f559d3ec17c251d891012715f986a15f64c9701e43e77a2baf19e683add353e8"
+  },
+  "integrated_ui_checks": {
+    "scope": "Protocol 2 execution/display checks, not independent anatomical accuracy.",
+    "protocol": "liver_context_local_medsam2",
+    "version": "2.0.0",
+    "full_suite": {
+      "passed": 134,
+      "seconds": 135.691,
+      "HCC_PILOT_TEST": 1
+    },
+    "HCC_002": {
+      "pre_acquisition": "1",
+      "post_acquisition": "1",
+      "segments": {
+        "Mass": 2,
+        "Liver": 1
+      },
+      "checks_passed": 8,
+      "timings": {
+        "pre_slice_while_pending_ms": 124,
+        "pre_backend_already_returned": false,
+        "post_slice_while_pending_ms": 151,
+        "post_backend_already_returned": false,
+        "pre_slice_during_inference_ms": 196,
+        "pre_inference_already_returned": false,
+        "post_slice_during_inference_ms": 133,
+        "post_inference_already_returned": false,
+        "api_ms": 49028
+      },
+      "inference_seconds": 46.65113681300136,
+      "voxels": 308628,
+      "mask_sha256": "3335481250addab7c7d050fbbecb3a19db7f9f252eb31c26800fc50c83cde001",
+      "localization_consistency": {
+        "search_region_zyx": [
+          [
+            41,
+            230,
+            38
+          ],
+          [
+            93,
+            401,
+            225
+          ]
+        ],
+        "inside_voxels": 307963,
+        "outside_voxels": 665,
+        "outside_fraction": 0.0021546975647057298,
+        "max_outside_fraction": 0.5,
+        "status": "passed",
+        "mask_clipped_to_region": false
+      },
+      "validation_sha256": "25db6ca0dd24e3c73d48a396c837f59ae0d5f736a67276f41aeccc8c9fa58621"
+    },
+    "HCC_006": {
+      "pre_acquisition": "3",
+      "post_acquisition": "1",
+      "segments": {
+        "Mass": 2,
+        "Liver": 1
+      },
+      "checks_passed": 6,
+      "ui_elapsed_ms": 51651,
+      "navigation_ms": {
+        "pre_ms": 58,
+        "post_ms": 67
+      },
+      "inference_seconds": 48.4740279799953,
+      "candidate_operation_seconds": 50.2888,
+      "voxels": 11172,
+      "mask_sha256": "f933a153c501ba09e531e6f903220ca9313d04cf87f95dc99d11221520406637",
+      "bounds_zyx_halfopen": [
+        [
+          49,
+          310,
+          173
+        ],
+        [
+          65,
+          359,
+          221
+        ]
+      ],
+      "invalid_padding_voxels": 0,
+      "outside_field_voxels": 0,
+      "outside_search_roi_voxels": 0,
+      "components": {
+        "6": {
+          "count": 3,
+          "sizes_descending": [
+            11170,
+            1,
+            1
+          ]
+        },
+        "26": {
+          "count": 2,
+          "sizes_descending": [
+            11171,
+            1
+          ]
+        }
+      },
+      "internal_field_touch_faces": [],
+      "anatomical_model_comparison": {
+        "ordered_ct_hashes_identical": true,
+        "native_grid_verified": true,
+        "artifact_sha256": "1819616fb288bcf0d5eddcd330a8031c1ce619782588c6c72c919f59db95c498",
+        "source_revision": "d89e47f73d24f5fba732a715aeb6fdc0ae34526b",
+        "mode": "total fast 3 mm; liver and kidneys only",
+        "overlap": {
+          "kidney_right": {
+            "intersection_voxels": 0,
+            "fraction_of_candidate": 0.0
+          },
+          "kidney_left": {
+            "intersection_voxels": 0,
+            "fraction_of_candidate": 0.0
+          },
+          "liver": {
+            "intersection_voxels": 2152,
+            "fraction_of_candidate": 0.19262441818832796
+          }
+        },
+        "scope": "Model-to-model spatial overlap only. TotalSegmentator labels are predictions, not ground truth; liver may exclude treated lesion."
+      },
+      "audit_sha256": "31e7c9a071c9ef425174293b6656c8e7e85a1aa46e979c6ebd6108c7842f3269"
+    }
+  }
+}

@@ -22,6 +22,31 @@ from hcclab.server import handler
 
 
 class CandidateStoreTests(unittest.TestCase):
+    def test_automatic_label_comes_from_fresh_verified_seg_header(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            paths = [root / name for name in ('first', 'second', 'seg')]
+            for path in paths:
+                path.write_bytes(b'synthetic source')
+            first = Slice(paths[0], '1.2.1', '1', '1.2.9', (2, 2), (1, 1),
+                          (1, 0, 0, 0, 1, 0), (0, 0, 0))
+            stack = build_stack([first, replace(first, path=paths[1], sop='1.2.2', position=(0, 0, 1))])
+            lab = Lab(root, root / 'annotations')
+            lab.pre_stack = lab.post_stack = Mock(return_value=({'StudyInstanceUID': '1.3'}, stack))
+            old_header, fresh_header = object(), object()
+            payload = {'case_id': 'SYNTHETIC', 'series_uid': '1.4', 'stack_index': 0,
+                       'pre_series_uid': '1.5', 'pre_stack_index': 0, 'segment': 2}
+            def labels(header):
+                return [{'number': 2, 'label': 'Mass' if header is old_header else 'Liver'}]
+            with patch('hcclab.lab.find_seg', return_value=(paths[2], old_header)), \
+                    patch('hcclab.lab.verify_pre_sources', return_value=(paths[2], fresh_header)), \
+                    patch('hcclab.lab.segment_options', side_effect=labels), \
+                    patch('hcclab.lab.referenced_mask') as decode:
+                with self.assertRaisesRegex(GeometryError, 'Mass segment'):
+                    lab.create_automatic_post_candidate(payload)
+                decode.assert_not_called()
+                self.assertFalse(lab.segmentation_lock.locked())
+
     def test_automatic_post_rechecks_baseline_ct_and_seg_bytes(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

@@ -1,7 +1,8 @@
 """Candidata POST desde Efficient MedSAM2 tiny, sin usar PRE como salida.
 
-La caja localizada solo inicia el modelo en un corte. La propagación recorre
-toda la adquisición POST; ninguna extensión PRE recorta la máscara resultante.
+La caja localizada inicia el modelo en un corte de un contexto XY físico.
+La propagación recorre todos los cortes POST; ninguna extensión PRE en z
+recorta la máscara resultante. El exterior del campo XY no se evalúa.
 Torch y el predictor se cargan únicamente al generar una candidata, nunca al
 navegar imágenes. Código y checkpoint están fijados en model_assets.py.
 """
@@ -13,6 +14,7 @@ import time
 import numpy as np
 
 from .geometry import GeometryError
+from .inference_field import context_bounds
 from .model_assets import verify_model
 
 
@@ -21,6 +23,7 @@ CONFIG_SHA256 = '55a0142a2d0076d3c434a8a35c23ccc16e7e42ef06153b571f147615befa070
 WINDOW_LEVEL_HU = 40.0
 WINDOW_WIDTH_HU = 400.0
 MODEL_SIZE = 512
+MIN_CONTEXT_MM = 160
 MAX_VOXELS = 64_000_000
 MAX_SLICES = 256
 MAX_SECONDS = 300.0
@@ -176,12 +179,27 @@ anatómica. La candidata sigue unreviewed aunque todos estos controles pasen.
                                 'input_resize': 'bilinear_align_corners_false_if_needed',
                                 'output_grid': 'native_POST', 'output_threshold_logit': 0,
                                 'propagation': 'all_POST_slices_bidirectional',
+                                'context_minimum_mm': MIN_CONTEXT_MM,
+                                'context_rule': 'max(160 mm, 2 * largest localized XY box side in mm)',
                                 'cuda_hole_filling': False, 'max_seconds': MAX_SECONDS},
                    'warnings': ['Training overlap with HCC-TACE-Seg has not been established.']}
     z, box, roi = _validate_inputs(post_hu, spacing_zyx, location, valid_mask, diagnostics)
-    diagnostics.update(prompt_slice_index=z, prompt_box_xyxy=box.tolist(),
+    try:
+        low, high = context_bounds(post_hu.shape, location, spacing_zyx, MIN_CONTEXT_MM)
+    except (KeyError, TypeError, ValueError):
+        _fail('The localized input field is incompatible with POST.', 'invalid_input_field', diagnostics)
+    native_box = box.copy()
+    box = box - np.asarray([low[1], low[0], low[1], low[0]])
+    field = (slice(None), slice(low[0], high[0]), slice(low[1], high[1]))
+    field_shape = tuple(int(value) for value in high - low)
+    diagnostics.update(prompt_slice_index=z, prompt_box_xyxy=native_box.tolist(),
+                       model_prompt_box_xyxy=box.tolist(),
                        prompt_box_convention='inclusive_pixel_centers',
-                       localization_box_zyx=location['localized_box_zyx'])
+                       localization_box_zyx=location['localized_box_zyx'],
+                       inference_field_yx=[low.tolist(), high.tolist()],
+                       inference_field_shape_yx=list(field_shape),
+                       outside_inference_field='not_assessed',
+                       model_input_resized=field_shape != (MODEL_SIZE, MODEL_SIZE))
     if not _LOCK.acquire(blocking=False):
         _fail('A model prediction is already running. Wait for it to finish.', 'model_busy', diagnostics)
     state = None
@@ -198,27 +216,26 @@ anatómica. La candidata sigue unreviewed aunque todos estos controles pasen.
         diagnostics['model'] = provenance
         diagnostics['software'] = {'torch': torch.__version__, 'torchvision': version('torchvision'),
                                    'hydra-core': version('hydra-core'), 'numpy': np.__version__}
-        frames = _NativeFrames(post_hu, valid_mask, torch)
-        native_shape = post_hu.shape[1:]
+        frames = _NativeFrames(post_hu[field], None if valid_mask is None else valid_mask[field], torch)
         mask = np.zeros(post_hu.shape, dtype=bool)
         seen = np.zeros(len(post_hu), dtype=bool)
         with torch.inference_mode():
-            state = predictor.init_state(frames, *native_shape)
+            state = predictor.init_state(frames, *field_shape)
             _, _, logits = predictor.add_new_points_or_box(state, frame_idx=z, obj_id=1, box=box)
-            prompt = _mask_from_logits(logits, native_shape, diagnostics)
+            prompt = _mask_from_logits(logits, field_shape, diagnostics)
             if not prompt.any():
                 _fail('The model could not identify a region at the registered location.', 'empty_prompt', diagnostics)
             for reverse in (False, True):
                 if reverse:
                     predictor.reset_state(state)
-                    state = predictor.init_state(frames, *native_shape)
+                    state = predictor.init_state(frames, *field_shape)
                 predictor.add_new_mask(state, frame_idx=z, obj_id=1, mask=prompt)
                 for index, _, logits in predictor.propagate_in_video(state, start_frame_idx=z, reverse=reverse):
                     if time.perf_counter()-started > MAX_SECONDS:
                         _fail('POST prediction exceeded its execution time limit.', 'time_limit', diagnostics)
                     if not isinstance(index, int) or not 0 <= index < len(post_hu):
                         _fail('The model returned an invalid POST slice.', 'invalid_model_output', diagnostics)
-                    mask[index] = _mask_from_logits(logits, native_shape, diagnostics)
+                    mask[index, low[0]:high[0], low[1]:high[1]] = _mask_from_logits(logits, field_shape, diagnostics)
                     seen[index] = True
         if not seen.all():
             _fail('The model did not process every POST slice.', 'incomplete_propagation', diagnostics)
@@ -228,6 +245,18 @@ anatómica. La candidata sigue unreviewed aunque todos estos controles pasen.
         count = int(np.count_nonzero(mask))
         if not count:
             _fail('The model produced no valid POST region.', 'empty_prediction', diagnostics)
+        # A crop boundary is an artificial field limit. Never silently present
+        # a prediction truncated there as a complete treated-lesion candidate.
+        contacts = [name for name, internal, plane in (
+            ('y_min', low[0] > 0, mask[:, low[0], low[1]:high[1]]),
+            ('y_max', high[0] < post_hu.shape[1], mask[:, high[0]-1, low[1]:high[1]]),
+            ('x_min', low[1] > 0, mask[:, low[0]:high[0], low[1]]),
+            ('x_max', high[1] < post_hu.shape[2], mask[:, low[0]:high[0], high[1]-1]))
+            if internal and plane.any()]
+        diagnostics['internal_field_touch_faces'] = contacts
+        if contacts:
+            _fail('Prediction reaches the input field boundary. A larger field must be evaluated.',
+                  'incomplete_input_field', diagnostics)
         _check_localization_consistency(mask, roi, diagnostics)
         edge_faces = [name for name, plane in (
             ('z_min', mask[0]), ('z_max', mask[-1]), ('y_min', mask[:, 0]),

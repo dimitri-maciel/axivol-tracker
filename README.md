@@ -2,7 +2,7 @@
 
 Aplicación local para explorar tomografías de carcinoma hepatocelular antes y después de TACE, revisar las segmentaciones publicadas y medir su volumen en la geometría original.
 
-La interfaz está en inglés. Incluye dos visores, selección de serie y adquisición, ventana y nivel, zoom, navegación por cortes y exportación de reportes. La máscara PRE permite ajustar contorno y transparencia, corregir una copia con pincel y generar un refinamiento automático local del borde conservando el original. **Follow-up mask** permite generar una candidata POST automáticamente: estima un registro rígido, utiliza `Mass` PRE para localizar una región y delimita sobre los píxeles POST. También conserva el método asistido con región, semilla y límites HU. Las candidatas y el registro requieren revisión; las referencias POST expertas y la comparación longitudinal siguen pendientes. El volumen de un candidato no determina viabilidad ni respuesta al tratamiento.
+La interfaz está en inglés. Incluye dos visores, selección de serie y adquisición, ventana y nivel, zoom, navegación por cortes y exportación de reportes. La máscara PRE permite ajustar contorno y transparencia, corregir una copia con pincel y generar un refinamiento automático local del borde conservando el original. **Follow-up mask** genera una candidata POST con registro rígido global, refinamiento centrado en `Liver ∪ Mass` PRE y segmentación de los píxeles POST en un contexto físico local. También conserva el método asistido con región, semilla y límites HU. Las candidatas y el registro requieren revisión; las referencias POST expertas y la comparación longitudinal siguen pendientes. El volumen de un candidato no determina viabilidad ni respuesta al tratamiento.
 
 ## Iniciar
 
@@ -15,6 +15,7 @@ mkdir -p data
 export HCC_UID=$(id -u) HCC_GID=$(id -g)
 docker compose run --build --rm ingest catalog
 docker compose run --rm ingest fetch --case HCC_002 --workers 3
+docker compose run --rm ingest fetch --case HCC_006 --workers 3
 docker compose run --rm --entrypoint python ingest -m hcclab.model_assets fetch
 docker compose up --build -d app
 ```
@@ -33,6 +34,8 @@ La generación POST usa Efficient MedSAM2 tiny en CPU. Los pesos se descargan a 
 - [Generación de candidatos POST: uso, método y evaluación](hcc-tace-lab/docs/post-segmentation.md).
 - [Localización y segmentación automática POST: funcionamiento y límites](hcc-tace-lab/docs/automatic-post-segmentation.md).
 - [Matemáticas de la segmentación, geometría y métricas](hcc-tace-lab/docs/post-segmentation-math.md).
+- [Investigación POST: evidencia, modelos abiertos, experimentos y validación](hcc-tace-lab/docs/research/README.md).
+- [Guía matemática del seguimiento con ejemplos](hcc-tace-lab/docs/research/post-mathematics.md).
 
 ## Estructura
 
@@ -41,6 +44,7 @@ hcc-tace-lab/
   hcclab/           Lectura DICOM, geometría, operaciones y servidor
   web/              Interfaz del visor
   tests/            Pruebas de geometría, integración y navegador
+  experiments/      Comparaciones reproducibles separadas de la aplicación
   docs/             Documentación técnica
   compose.yaml      Servicios de aplicación e ingesta
   Dockerfile        Construcción de las imágenes
@@ -59,7 +63,7 @@ docker compose exec -T -e HCC_PILOT_TEST=1 app python -m unittest discover -s te
 
 El caso de comprobación es **HCC_002, adquisición PRE 1, etiqueta Mass (segmento 2)**: 324 430 vóxeles y 495,04 cm³. Esta prueba verifica la lectura y medición de una máscara publicada; no evalúa el desempeño clínico ni toda la colección.
 
-Las pruebas POST utilizan una región pequeña de la adquisición 1 de HCC_002 para verificar geometría, superposición y exportación. Esa región de prueba no es una anotación tumoral. Los candidatos conservan el estado `unreviewed`; las medidas de respuesta permanecen sin calcular.
+Las pruebas del método asistido utilizan una región pequeña de la adquisición 1 de HCC_002 para verificar geometría, superposición y exportación; esa región no es una anotación tumoral. La prueba automática procesa la adquisición POST completa en z y verifica fuentes, máscara nativa y persistencia. Al 12 de noviembre de 2026 pasaron 134 pruebas y se comprobó la generación y visualización automática en HCC_002 y HCC_006. Los candidatos conservan el estado `unreviewed`; las medidas de respuesta permanecen sin calcular. La evidencia y sus límites están en la [guía del método](hcc-tace-lab/docs/automatic-post-segmentation.md).
 
 ## Atribución
 

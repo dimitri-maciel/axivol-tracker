@@ -1,0 +1,39 @@
+{
+  "intended_use": "research",
+  "evaluation_arms": [
+    {
+      "name": "engineering demonstration only; no reference POST segmentation",
+      "dataset": "HCC-TACE-Seg"
+    }
+  ],
+  "task": {
+    "model": "3d_ct_segmentation",
+    "study": "3d_ct_segmentation"
+  },
+  "model": "SegVol HF artifact",
+  "source": {
+    "kind": "github",
+    "url": "https://github.com/BAAI-DCAI/SegVol",
+    "commit": "5768c9795794a327a2629ce7f137ab03d5ea8378"
+  },
+  "code_licence": {
+    "spdx": "MIT",
+    "verified_from": "LICENSE at pinned code commit"
+  },
+  "weights": {
+    "pretrained": true,
+    "url": "https://huggingface.co/BAAI/SegVol",
+    "revision": "516701d5bef430604a13f5db7ce896149d075663",
+    "file": "pytorch_model.bin",
+    "bytes": 723726667,
+    "published_sha256": "500f2758a8f989339b2b2baf09a819169bc87549795193d3cfe505726ac0b399",
+    "downloaded": false
+  },
+  "hardware": {
+    "verified": false
+  },
+  "limitations": [
+    "Weights license missing in inspected HF repository; MIT code license is not a weight license.",
+    "Exact training overlap not established."
+  ]
+}

@@ -1,0 +1,26 @@
+{
+ "detector": "check_model_provenance",
+ "dossier": "hcc-tace-lab/docs/research/model-provenance/totalsegmentator-lesions.json",
+ "model": "TotalSegmentator CT liver_lesions task591",
+ "n_arms": 1,
+ "claims": [
+  {
+   "verdict": "DEVELOPED_ON_UNSTATED",
+   "severity": "Major",
+   "detail": "no 'developed_on' recorded, so whether an evaluation arm reuses the model's own development benchmark could not be checked; record the paper's account of where the method was built and tuned (an empty list states it was none)",
+   "where": [],
+   "n_where": 0
+  },
+  {
+   "verdict": "VALIDATION_UNREPORTED",
+   "severity": "Minor",
+   "detail": "no reported validation (dataset + metric + source) recorded for the model as published; there is then no prior expectation to compare your own numbers against",
+   "where": [],
+   "n_where": 0
+  }
+ ],
+ "summary": {
+  "major": 1,
+  "minor": 1
+ }
+}

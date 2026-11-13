@@ -363,9 +363,6 @@ class Lab:
         seg = find_seg(self.catalog, pre_row)
         if seg is None:
             raise GeometryError('Automatic localization needs a published baseline Mass segment.')
-        label = next((item['label'] for item in segment_options(seg[1]) if item['number'] == segment), None)
-        if label is None or label.strip().casefold() != 'mass':
-            raise GeometryError('Select the published baseline Mass segment for automatic localization.')
         if not self.segmentation_lock.acquire(blocking=False):
             raise ValueError('A mask operation is running. Wait for it to finish.')
         started = time.perf_counter()
@@ -375,13 +372,26 @@ class Lab:
             seg_hash = file_sha256(seg[0])
             seg = verify_pre_sources(pre_stack, seg, expected_series_uid=pre_uid,
                                      expected_study_uid=pre_row['StudyInstanceUID'])
+            # Validate the freshly verified header, not a catalog-time copy.
+            label = next((item['label'] for item in segment_options(seg[1]) if item['number'] == segment), None)
+            if label is None or label.strip().casefold() != 'mass':
+                raise GeometryError('Select the published baseline Mass segment for automatic localization.')
+            liver_segments = [item for item in segment_options(seg[1]) if item['label'].strip().casefold() == 'liver']
+            if len(liver_segments) != 1:
+                raise GeometryError('Automatic localization needs one published Liver segment for anatomical context.')
+            liver_segment = liver_segments[0]
             original = referenced_mask(*seg, segment, pre_stack)
+            liver = referenced_mask(*seg, liver_segment['number'], pre_stack)
+            context_segments = [{'number': segment, 'label': label}, liver_segment]
+            if not liver.any():
+                raise GeometryError('The published Liver segment is empty on the selected PRE acquisition.')
             pre_hu, pre_valid = self.hu_volume(pre_uid, pre_index, pre_hashes)
             post_hu, post_valid = self.hu_volume(uid, index, post_hashes)
             try:
                 mask, diagnostics = automatic_post_candidate(pre_hu, post_hu, original, pre_stack, stack,
                                                             pre_valid=pre_valid, post_valid=post_valid,
-                                                            model_path=model_path(self.catalog.data))
+                                                            model_path=model_path(self.catalog.data),
+                                                            pre_context_mask=liver | original)
             except AutomaticSegmentationError as error:
                 # A failed run is useful evidence too, but it is not a mask.
                 # Let the browser export its inputs and reason without storing
@@ -390,6 +400,7 @@ class Lab:
                         or pre_hashes != tuple(file_sha256(s.path) for s in pre_stack.slices)
                         or post_hashes != tuple(file_sha256(s.path) for s in stack.slices)):
                     raise GeometryError('Source files changed during automatic segmentation. Reload the acquisitions.') from error
+                error.diagnostics['registration']['context_segments'] = context_segments
                 error.diagnostics['sources'] = {
                     'case_id': case_id, 'created_utc': datetime.now(timezone.utc).isoformat(),
                     'pre': {'series_uid': pre_uid, 'stack_index': pre_index,
@@ -402,10 +413,11 @@ class Lab:
                     'software': {name: importlib.metadata.version(name) for name in
                                  ('numpy', 'scipy', 'pydicom', 'SimpleITK', 'torch', 'torchvision', 'MedSAM2', 'hydra-core')},
                     'implementation_sha256': {name: file_sha256(Path(__file__).with_name(name))
-                                              for name in ('registration.py', 'post_automatic.py', 'post_model.py', 'model_assets.py', 'volume.py')},
+                                              for name in ('registration.py', 'post_automatic.py', 'post_model.py', 'inference_field.py', 'model_assets.py', 'volume.py')},
                     'elapsed_seconds': round(time.perf_counter() - started, 4),
                 }
                 raise
+            diagnostics['registration']['context_segments'] = context_segments
             if (seg_hash != file_sha256(seg[0])
                     or pre_hashes != tuple(file_sha256(s.path) for s in pre_stack.slices)
                     or post_hashes != tuple(file_sha256(s.path) for s in stack.slices)):
@@ -423,6 +435,7 @@ class Lab:
             pre_record = self._pre_provenance(pre_payload, pre_row, pre_stack, seg, pre_hashes, seg_hash)
             baseline = {key: pre_record[key] for key in ('series_uid', 'stack_index', 'acquisition',
                         'source_segment', 'source_segment_label', 'source_seg_sop_uid', 'source_seg_sha256', 'source')}
+            baseline['registration_context_segments'] = context_segments
             voxels = count
             metadata = {
                 'schema_version': 1, 'status': 'unreviewed', 'stage': 'POST',
@@ -434,14 +447,17 @@ class Lab:
                 'baseline_source': baseline, 'shape_zyx': list(mask.shape), 'voxels': voxels,
                 'volume_cm3': native_volume_cm3(voxels, first.spacing, stack.interval_mm),
                 'diagnostics': diagnostics,
-                'method': {'name': 'registered_post_segmentation', 'version': '1.0.0',
+                'method': {'name': 'registered_post_segmentation', 'version': '2.0.0',
+                           'protocol': 'liver_context_local_medsam2',
                            'native_output_grid': True, 'registration_working_grid_resampled': True,
                            'model_input_shape_yx': [512, 512],
-                           'model_input_resized': tuple(post_hu.shape[1:]) != (512, 512),
+                           'model_input_resized': result['model_input_resized'],
+                           'inference_field_yx': result['inference_field_yx'],
+                           'outside_inference_field': 'not_assessed',
                            'uses_pre_mask': 'localization_only', 'mask_intensities': 'native_POST_HU',
                            'padding_excluded': True,
                            'implementation_sha256': {name: file_sha256(Path(__file__).with_name(name))
-                                                     for name in ('registration.py', 'post_automatic.py', 'post_model.py', 'model_assets.py', 'volume.py')}},
+                                                     for name in ('registration.py', 'post_automatic.py', 'post_model.py', 'inference_field.py', 'model_assets.py', 'volume.py')}},
                 'source': {'collection': COLLECTION, 'dataset_doi': DOI,
                            'study_uid': row['StudyInstanceUID'], 'frame_of_reference_uid': first.frame,
                            'stack_identity': stack_identity(stack), 'axis_order': 'z,y,x',

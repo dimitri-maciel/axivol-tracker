@@ -1,0 +1,64 @@
+{
+  "model": "TotalSegmentator CT liver_lesions task591",
+  "source": {
+    "kind": "github",
+    "url": "https://github.com/wasserth/TotalSegmentator",
+    "commit": "d89e47f73d24f5fba732a715aeb6fdc0ae34526b"
+  },
+  "licence": {
+    "spdx": "Apache-2.0",
+    "verified_from": "Code LICENSE at pinned commit; README explicitly lists liver_lesions under open Apache-2.0 tasks. ZIP has no separate license, dataset.json licence field is unspecified."
+  },
+  "intended_use": "research",
+  "weights": {
+    "pretrained": true,
+    "url": "https://github.com/wasserth/TotalSegmentator/releases/tag/v2.5.0-weights",
+    "file": "Dataset591_ct_liver_lesions_842subj.zip",
+    "bytes": 230940114,
+    "sha256": "b3bdd53de65dc64a46264edfdeb491b18e8f95973a691eeccfa530d1da1678a0",
+    "digest_verified_locally": true,
+    "trained_on": [
+      "Dataset591 CT liver lesions 842 subjects (Zenodo20272572)"
+    ],
+    "training_provenance_note": "Exact patient identities and overlap with HCC-TACE not established. The cited paper originally describes a mixed CT/MRI model; do not transfer its splits or performance to this newer CT artifact.",
+    "release_asset_created_utc": "2026-03-16T13:49:41Z",
+    "overlap_review": "Paper, model metadata and Zenodo description inspected; archive listing unavailable (too many files).39GB dataset not downloaded. Exact overlap unknown."
+  },
+  "task": {
+    "model": "3d_ct_lesion_segmentation",
+    "study": "3d_ct_lesion_segmentation"
+  },
+  "evaluation_arms": [
+    {
+      "name": "engineering demonstration without reference",
+      "dataset": "HCC-TACE-Seg"
+    }
+  ],
+  "hardware": {
+    "claimed": "CPU supported in API",
+    "verified": true,
+    "verified_on": "Linux aarch64,torch2.5.1,CPU quota4,upstream10threads,6GiB cap,1068.491s inference,4112.219MiB peakRSS"
+  },
+  "related_paper": {
+    "doi": "10.1007/s10278-025-01716-y",
+    "verified_url": "https://link.springer.com/article/10.1007/s10278-025-01716-y",
+    "scope": "Related method, not a verified validation record for exact CT task591 weights"
+  },
+  "limitations": [
+    "Exact HCC-TACE independence not established.",
+    "No POST lesion reference in our experiment.",
+    "Anatomical crop is part of official pipeline; all predicted lesion output retained."
+  ],
+  "local_experiment": {
+    "case_id": "HCC_006",
+    "post_acquisition": "1",
+    "voxels": 40,
+    "volume_cm3": 0.06103515625,
+    "distance_to_global_registration_center_mm": 116.51743800738356,
+    "distance_to_liver_registration_center_mm": 121.27568696436218,
+    "overlap_with_any_localization_roi_voxels": 0,
+    "conclusion": "No predicted component supports the current localized target. Not a recall estimate without ground truth.",
+    "source_unchanged": true,
+    "native_geometry_verified": true
+  }
+}
