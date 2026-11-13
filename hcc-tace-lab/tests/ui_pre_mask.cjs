@@ -46,6 +46,8 @@ const {createHash} = require('node:crypto');
   try {
     await page.goto(url + '/?case=HCC_002'); await ready('pre'); await ready('post');
     await page.waitForLoadState('networkidle');
+    await page.locator('#baseline-tab').click();
+    await page.locator('#overlay-display > summary').click();
     const anisotropic = await page.evaluate(async () => {
       const {applyBrush} = await import('/pre-mask-editor.js');
       const mask = new Uint8Array(81);
@@ -115,7 +117,7 @@ const {createHash} = require('node:crypto');
     await brush('erase', [erasePoint]);
     const erased = await previewMask(); assert.ok(erased.reduce((n, v) => n + v, 0) < foreground);
     await page.locator('#pre-edit-stop').click(); await ready('pre');
-    assert.match(await page.locator('#pre-edit-message').innerText(), /Editing paused.*unsaved edits are kept/);
+    assert.match(await page.locator('#pre-edit-message').innerText(), /Editing paused.*Unsaved edits are preserved/);
     assert.match(await page.locator('#pre-overlay-label').innerText(), /Published Mass/);
     await page.locator('#pre-edit-erase').click(); await ready('pre'); await canvasReady();
     assert.deepEqual(await previewMask(), erased, 'Pausing must preserve the unsaved strokes.');

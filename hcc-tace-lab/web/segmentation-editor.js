@@ -5,7 +5,7 @@ const integer = new Intl.NumberFormat('en-US');
 const decimal = new Intl.NumberFormat('en-US', {maximumFractionDigits: 2});
 const fields = ['first', 'last', 'lower', 'upper', 'x0', 'x1', 'y0', 'y1', 'seed-x', 'seed-y', 'seed-z'];
 const isAutomatic = item => item?.method?.name === 'registered_post_segmentation';
-const candidateLabel = item => isAutomatic(item) ? 'Automatic candidate · Unreviewed' : 'Manual candidate · Unreviewed';
+const candidateLabel = item => isAutomatic(item) ? 'Automatic mask · Unreviewed' : 'Seed-based mask · Unreviewed';
 const baselineKey = item => item ? [item.series_uid, item.stack_index, item.source_segment].join('|') : '';
 
 export function createSegmentationEditor(adapter) {
@@ -75,7 +75,7 @@ export function createSegmentationEditor(adapter) {
     attempt = {created_utc: new Date().toISOString(), request, response,
       scope: 'No automatic candidate was created. Registration remains unverified.'};
     $('attempt').hidden = false;
-    $('attempt-title').textContent = response.status === 'abstained' ? 'Automatic segmentation needs review' : 'Automatic generation failed';
+    $('attempt-title').textContent = response.status === 'abstained' ? 'No segmentation generated' : 'Automatic generation failed';
     $('attempt-reason').textContent = response.error;
     $('attempt-baseline').textContent = baseline.source_segment_label + ' (' + baseline.source_segment
       + ') · Acquisition ' + baseline.acquisition;
@@ -160,7 +160,7 @@ export function createSegmentationEditor(adapter) {
     for (const name of ['region-tool', 'seed-tool']) $(name).disabled = !available;
     for (const name of fields) $(name).disabled = !source?.shape;
     $('generate').disabled = busy || seedBusy || !available || !!validation();
-    $('generate').textContent = busy && jobKind === 'manual' ? 'Generating…' : seedBusy ? 'Reading seed…' : 'Generate candidate';
+    $('generate').textContent = busy && jobKind === 'manual' ? 'Generating…' : seedBusy ? 'Reading seed…' : 'Generate mask';
     $('automatic').disabled = busy || seedBusy || !!drag || !automaticAvailable();
     $('automatic').textContent = busy && jobKind === 'automatic' ? 'Generating…' : 'Generate automatically';
     $('automatic').classList.toggle('is-busy', busy && jobKind === 'automatic');
@@ -192,8 +192,8 @@ export function createSegmentationEditor(adapter) {
     const reason = document.getElementById('post-mask-reason');
     let hint = '';
     if (candidate) {
-      label.textContent = $('overlay').checked
-        ? (isAutomatic(candidate) ? 'Automatic mask' : 'Manual mask') + ' · Unreviewed' : 'Mask hidden';
+      label.textContent = candidateLabel(candidate);
+      if (!$('overlay').checked) hint = 'Mask hidden';
       action.textContent = $('overlay').checked ? 'Hide mask' : 'Show mask';
       action.disabled = false;
     } else if (!busy && saved.some(selectable)) {
@@ -211,7 +211,7 @@ export function createSegmentationEditor(adapter) {
       else if (source.issue) hint = source.issue;
       else if (baseline.issue) hint = 'The baseline acquisition needs geometry review.';
       else if (!source.interval_mm || !baseline.interval_mm) hint = 'Verified slice spacing is required.';
-      else if (attempt) hint = 'Automatic generation needs review.';
+      else if (attempt) hint = 'No new mask generated. See run details.';
       else if (differentReference) hint = 'Saved masks use a different baseline reference.';
     }
     action.classList.toggle('is-busy', busy && !candidate);
@@ -236,7 +236,7 @@ export function createSegmentationEditor(adapter) {
   function renderCandidate() {
     $('result').hidden = !candidate;
     $('empty').hidden = !!candidate;
-    $('status').textContent = candidate ? candidateLabel(candidate) : 'No candidate';
+    $('status').textContent = candidate ? candidateLabel(candidate) : 'No mask';
     document.getElementById('followup-segmentation-status').textContent = candidate ? candidateLabel(candidate) : 'Unavailable';
     document.getElementById('registration-status').textContent = isAutomatic(candidate)
       || attempt?.response.diagnostics?.registration?.status === 'estimated_unverified' ? 'Unverified' : 'Pending';
@@ -253,7 +253,7 @@ export function createSegmentationEditor(adapter) {
     if (candidate) {
       $('volume').textContent = decimal.format(candidate.volume_cm3);
       $('voxels').textContent = integer.format(candidate.voxels);
-      $('source').textContent = candidate.case_id + ' · Acquisition ' + candidate.acquisition + ' · ' + candidate.label;
+      $('source').textContent = candidate.case_id + ' · Acquisition ' + candidate.acquisition;
       $('export').href = '/api/candidates/' + encodeURIComponent(candidate.id) + '/export';
       if (isAutomatic(candidate)) {
         const baseline = candidate.baseline_source;
@@ -280,7 +280,7 @@ export function createSegmentationEditor(adapter) {
       seedReady ? 'Seed on slice ' + (seed[0] + 1) : 'Pick a seed inside it',
     ].join('. ') + '.';
     message(busy ? 'Parameters changed. Generate again when the current request finishes.'
-      : validation() || 'Ready to generate. The result will be an unreviewed candidate.');
+      : validation() || 'Ready to generate an unreviewed mask.');
     if (hadOverlay) adapter.refreshImage();
     readSeed();
     sync();
@@ -297,10 +297,10 @@ export function createSegmentationEditor(adapter) {
       candidate = item;
       $('saved').value = item.id;
       $('overlay').checked = true;
-      $('selection').textContent = 'Manual settings are separate from the automatic mask.';
+      $('selection').textContent = 'Seed-based settings do not change the automatic mask.';
       setMode(null);
       renderCandidate();
-      message('Automatic candidate loaded. Registration and the mask require review.');
+      message('Automatic mask loaded. Review the alignment and boundary.');
       adapter.focusSlice(item.diagnostics.segmentation.display_slice_index);
       return;
     }
@@ -314,18 +314,18 @@ export function createSegmentationEditor(adapter) {
     $('selection').textContent = 'Saved region and seed restored. Seed on slice ' + (seed[0] + 1) + '.';
     setMode(null);
     renderCandidate();
-    message('Candidate saved. Inspect it across slices; adjust parameters to generate another.');
+    message('Seed-based mask loaded. Review the boundary on each slice.');
     adapter.refreshImage();
     readSeed();
   }
 
   function updateSaved() {
     const available = saved.filter(selectable);
-    const placeholder = new Option(available.length ? 'Choose a candidate' : 'No saved candidates', '');
+    const placeholder = new Option(available.length ? 'Choose a mask' : 'No saved masks', '');
     placeholder.disabled = true;
     placeholder.selected = !candidate;
     $('saved').replaceChildren(placeholder,
-      ...available.map(item => new Option((isAutomatic(item) ? 'Automatic' : 'Manual') + ' · '
+      ...available.map(item => new Option((isAutomatic(item) ? 'Automatic' : 'Seed-based') + ' · '
         + decimal.format(item.volume_cm3) + ' cm³ · ' + item.id.slice(0, 8), item.id)));
     $('saved').disabled = !available.length;
     if (candidate) $('saved').value = candidate.id;
@@ -430,6 +430,9 @@ export function createSegmentationEditor(adapter) {
   }
 
   for (const name of fields) $(name).addEventListener('input', changed);
+  document.getElementById('manual-segmentation')?.addEventListener('toggle', event => {
+    if (!event.currentTarget.open) setMode(null);
+  });
   for (const name of ['region', 'seed']) $(name + '-tool').addEventListener('click', () => setMode(mode === name ? null : name));
   $('saved').addEventListener('change', () => {
     const item = saved.find(item => item.id === $('saved').value);
@@ -496,7 +499,7 @@ export function createSegmentationEditor(adapter) {
     const request = {case_id: source.case_id, series_uid: source.series_uid, stack_index: source.stack_index, ...parameters()};
     busy = true;
     jobKind = 'manual';
-    message('Generating candidate from follow-up CT…');
+    message('Generating a mask from follow-up CT…');
     sync();
     try {
       const response = await fetch('/api/candidates', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(request)});
@@ -508,7 +511,7 @@ export function createSegmentationEditor(adapter) {
         updateSaved();
         restore(payload);
       } else {
-        message('The previous parameters were saved as a candidate. Generate again to use your changes.');
+        message('Mask saved with the previous settings. Generate again to apply your changes.');
         readSaved();
       }
     } catch (error) {
@@ -540,8 +543,8 @@ export function createSegmentationEditor(adapter) {
       if (!response.ok) {
         if (referenceToken === baselineEpoch) {
           showAttempt(request, result, baseline, acquisition);
-          message(result.status === 'abstained' ? 'No automatic candidate was created. The existing mask, if any, is unchanged.'
-            : result.error || 'Automatic generation failed. Use manual selection.');
+          message(result.status === 'abstained' ? 'No new mask was saved. Existing masks are unchanged.'
+            : result.error || 'Automatic generation failed. Check run details.');
         }
         return;
       }
@@ -550,7 +553,7 @@ export function createSegmentationEditor(adapter) {
       if (referenceToken !== baselineEpoch || !selectable(result)) {
         message('Baseline reference changed. Generate again using the current reference.');
       } else if (draft !== revision || mode) {
-        message('Automatic candidate saved. Your manual settings were kept; select the saved candidate to view it.');
+        message('Automatic mask saved. Seed-based settings are preserved; select the saved mask to view it.');
       } else restore(result);
     } catch (error) {
       if (token === operation && referenceToken === baselineEpoch) {
@@ -564,6 +567,7 @@ export function createSegmentationEditor(adapter) {
 
   return {
     setSource, baselineChanged, sync, drawGuides,
+    pause() { setMode(null); },
     get selecting() { return !!mode; },
     get candidate() { return candidate; },
     get automatic() { return isAutomatic(candidate); },

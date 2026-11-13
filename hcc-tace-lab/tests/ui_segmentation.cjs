@@ -29,6 +29,8 @@ const path = require('node:path');
     await page.goto(url + '/?case=HCC_002');
     await ready('pre'); await ready('post');
     await page.waitForLoadState('networkidle');
+    await page.locator('#followup-tab').click();
+    await page.locator('#manual-segmentation > summary').click();
     assert.equal(await page.locator('#candidate-lower').inputValue(), '');
     assert.equal(await page.locator('#candidate-generate').isDisabled(), true);
     const uid = await page.locator('#post-series').inputValue();
@@ -77,6 +79,7 @@ const path = require('node:path');
     await ready('post');
     assert.match(await page.locator('#candidate-status').innerText(), /Unreviewed/);
     assert.match(await page.locator('#candidate-source').innerText(), /HCC_002.*Acquisition 1/);
+    await page.locator('#candidate-editor .review-notes > summary').click();
     assert.equal(await page.locator('#candidate-warnings').isVisible(), true);
     checks.push('Draw and seed map real CT pixels through contain geometry; API receives [z,y,x] and max-exclusive ROI.');
     const colors = () => page.locator('#post-image').evaluate(img => {
@@ -107,6 +110,8 @@ const path = require('node:path');
     await page.locator('#candidate-saved').selectOption(first.id); await ready('post');
     assert.equal(await page.locator('#candidate-upper').inputValue(), '3071');
     await page.reload(); await ready('pre'); await ready('post');
+    await page.locator('#followup-tab').click();
+    await page.locator('#manual-segmentation > summary').click();
     await page.waitForFunction(id => document.getElementById('candidate-saved').value === id, first.id);
     checks.push('Editing parameters clears old overlay/export; saved versions restore frozen parameters after reload.');
     // Delay a real candidate response, edit parameters, then ensure the old result cannot replace the draft.

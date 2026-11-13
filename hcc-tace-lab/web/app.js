@@ -49,6 +49,40 @@ const preEditor = createPreMaskEditor({
   },
 });
 
+// Tabs only organize tools; they never change images, sources or mask visibility.
+const inspectorTabs = [$('baseline-tab'), $('followup-tab')];
+function selectInspector(stage, focus = false) {
+  if (stage === 'pre') editor.pause();
+  else preEditor.pause();
+  for (let i = 0; i < inspectorTabs.length; i++) {
+    const tab = inspectorTabs[i], active = stages[i] === stage;
+    tab.setAttribute('aria-selected', String(active));
+    tab.tabIndex = active ? 0 : -1;
+    $(tab.getAttribute('aria-controls')).hidden = !active;
+    if (active && focus) tab.focus();
+  }
+}
+inspectorTabs.forEach((tab, index) => {
+  tab.addEventListener('click', () => selectInspector(stages[index]));
+  tab.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const target = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : 1 - index;
+    selectInspector(stages[target], true);
+  });
+});
+for (const stage of stages) {
+  element(stage, 'tools').addEventListener('click', () => {
+    selectInspector(stage, true);
+    inspectorTabs[stages.indexOf(stage)].scrollIntoView({block: 'nearest'});
+  });
+}
+$('post-mask-details').addEventListener('click', event => {
+  event.preventDefault();
+  selectInspector('post', true);
+  $('candidate-editor').scrollIntoView({block: 'nearest'});
+});
+
 async function json(url) {
   let response;
   try { response = await fetch(url); }
@@ -515,6 +549,7 @@ function viewSignature() {
     display: state.display, volume: $('volume-value').textContent,
     candidate: editor.signature,
     preEdits: preEditor.signature,
+    inspector: $('baseline-tab').getAttribute('aria-selected'),
   });
 }
 $('capture').addEventListener('click', async () => {
@@ -522,7 +557,7 @@ $('capture').addEventListener('click', async () => {
   button.disabled = true;
   try {
     const canvas = await window.html2canvas(document.body, {
-      scale: 2, backgroundColor: '#111418', logging: false,
+      scale: 2, backgroundColor: '#111820', logging: false,
       onclone(doc) {
         // html2canvas does not implement object-fit. Paint each image with
         // the same contain geometry as the live viewport before exporting.
@@ -541,7 +576,19 @@ $('capture').addEventListener('click', async () => {
           Object.assign(canvas.style, {display: 'block', width: '100%', height: '100%', minHeight: '0', transform: source.style.transform});
           doc.getElementById(stage + '-image').replaceWith(canvas);
         }
-        doc.querySelectorAll('details:not([open]) .study-fields').forEach(el => el.remove());
+        // html2canvas does not honor the native closed-details rendering.
+        // Remove undisplayed content from the clone, never the live workspace.
+        doc.querySelectorAll('details:not([open])').forEach(details => {
+          [...details.childNodes].forEach(node => {
+            if (node.nodeName !== 'SUMMARY') node.remove();
+          });
+        });
+        doc.querySelectorAll('summary').forEach(summary => {
+          summary.style.listStyle = 'none';
+          if (doc.defaultView.getComputedStyle(summary).display === 'list-item') {
+            summary.style.display = 'block';
+          }
+        });
         doc.querySelectorAll('input[type=range]').forEach(input => {
           const track = doc.createElement('div');
           const fraction = (Number(input.value) - Number(input.min)) / Math.max(1, Number(input.max) - Number(input.min));
@@ -569,7 +616,7 @@ $('capture').addEventListener('click', async () => {
 try {
   const overview = await json('/api/cases');
   const ready = overview.cases.filter(c => c.studies >= 2);
-  $('catalog-status').textContent = ready.length + ' available cases';
+  $('catalog-status').textContent = ready.length + ' cases in catalog';
   if (!ready.length) {
     options($('case'), [['', 'No studies available']]);
     $('loading').textContent = 'Download a baseline and follow-up study to begin.';

@@ -32,6 +32,7 @@ const path = require('node:path');
   try {
     await page.goto(url + '/?case=HCC_006');
     await page.waitForLoadState('networkidle'); await ready('pre'); await ready('post');
+    await page.locator('#followup-tab').click();
     assert.match(await page.locator('#candidate-baseline').innerText(), /Published Mass \(2\).*Acquisition 3/);
     const pre = await page.locator('#pre-series').inputValue();
     const post = await page.locator('#post-series').inputValue();

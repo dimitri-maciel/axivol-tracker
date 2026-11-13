@@ -43,6 +43,8 @@ const {createHash} = require('node:crypto');
   try {
     await page.goto(url + '/?case=HCC_002'); await ready('pre'); await ready('post');
     await page.waitForLoadState('networkidle');
+    await page.locator('#baseline-tab').click();
+    await page.locator('#baseline-refinement > summary').click();
     assert.equal(await page.locator('#pre-edit-band').inputValue(), '3');
     await page.locator('#pre-edit-band').fill('0');
     assert.equal(await page.locator('#pre-edit-refine').isDisabled(), true);

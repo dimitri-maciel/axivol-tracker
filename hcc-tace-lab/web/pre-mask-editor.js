@@ -66,15 +66,16 @@ export function createPreMaskEditor(adapter) {
     $('saved').disabled = busy || !hasSource();
     $('stop').hidden = !active;
     $('panel').setAttribute('aria-busy', String(busy));
+    const editedSlices = new Set(strokes.map(stroke => stroke.slice)).size;
     $('count').textContent = strokes.length ? strokes.length + (strokes.length === 1 ? ' stroke' : ' strokes') + ' on '
-      + new Set(strokes.map(stroke => stroke.slice)).size + ' slice(s)' : 'No edits';
+      + editedSlices + (editedSlices === 1 ? ' slice' : ' slices') : 'No edits';
     style.disabled = !source?.segment;
     opacity.disabled = !source?.segment || style.value === 'outline';
     viewport.classList.toggle('selecting', active && !!mode);
     canvas.hidden = !active || !mask || !document.getElementById('show-mask').checked;
     $('hint').hidden = !active;
     if (!canDraw()) $('cursor').hidden = true;
-    $('hint').textContent = !document.getElementById('show-mask').checked ? 'Overlay hidden · Show overlay to edit' : !mask ? 'Loading editable mask…' : mode
+    $('hint').textContent = !document.getElementById('show-mask').checked ? 'Show overlay to edit' : !mask ? 'Loading editable mask…' : mode
       ? (mode === 'paint' ? 'Paint' : 'Erase') + ' · ' + radius() + ' mm radius · Esc to pause'
       : 'Editing copy · Choose Paint or Erase';
     if (active) {
@@ -198,7 +199,7 @@ export function createPreMaskEditor(adapter) {
 
   function pause() {
     exit();
-    message(strokes.length ? 'Editing paused. Your unsaved edits are kept for this acquisition.'
+    message(strokes.length ? 'Editing paused. Unsaved edits are preserved for this acquisition.'
       : 'Editing paused. Viewing the published mask.');
   }
 
@@ -350,6 +351,7 @@ export function createPreMaskEditor(adapter) {
 
   return {
     setSource, sync,
+    pause: () => { if (active || drawing) pause(); },
     get editing() { return active; },
     get candidate() { return selected; },
     get signature() { return [revision, active, selected?.id, style.value, opacity.value]; },

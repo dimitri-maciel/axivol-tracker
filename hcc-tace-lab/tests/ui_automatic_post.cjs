@@ -26,6 +26,12 @@ const path = require('node:path');
       input.value = value; input.dispatchEvent(new Event('input', {bubbles: true}));
     }, value); await ready(stage);
   };
+  const openFollowup = async (target = page, manual = false) => {
+    await target.locator('#followup-tab').click();
+    if (manual && !await target.locator('#manual-segmentation').evaluate(element => element.open)) {
+      await target.locator('#manual-segmentation > summary').click();
+    }
+  };
   const manualFields = () => page.locator('#candidate-editor input[type=number]').evaluateAll(inputs => Object.fromEntries(inputs.map(input => [input.id, input.value])));
   const colored = () => page.locator('#post-image').evaluate(image => {
     const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
@@ -56,6 +62,7 @@ const path = require('node:path');
       assert.equal(await page.locator('#candidate-automatic').isDisabled(), true);
       await page.locator('#segment').selectOption(String(segment)); await ready('pre');
     }
+    await openFollowup(page, true);
     // Clear a previously restored candidate while retaining the stored artifacts.
     await page.locator('#candidate-lower').fill('0'); await page.locator('#candidate-lower').fill(''); await ready('post');
     const draft = await manualFields();
@@ -105,7 +112,7 @@ const path = require('node:path');
       assert.equal(await page.locator('#candidate-result').isHidden(), true);
       assert.equal(await page.locator('#post-overlay-label').isHidden(), true);
       assert.equal(await colored(), 0);
-      assert.equal(await page.locator('#candidate-attempt-title').innerText(), 'Automatic segmentation needs review');
+      assert.equal(await page.locator('#candidate-attempt-title').innerText(), 'No segmentation generated');
       const afterIds = (await (await page.request.get(listUrl)).json()).candidates.map(item => item.id).sort();
       assert.deepEqual(afterIds, beforeIds, 'Abstention must not create a candidate artifact');
       await page.locator('#candidate-attempt summary').click();
@@ -120,7 +127,7 @@ const path = require('node:path');
       assert.equal(realResponse.baseline_source.series_uid, preUid);
       assert.equal(realResponse.baseline_source.source_segment, segment);
       assert.equal(Number(await page.locator('#post-index').inputValue()), realResponse.diagnostics.segmentation.display_slice_index + 1);
-      assert.match(await page.locator('#candidate-status').innerText(), /Automatic candidate.*Unreviewed/);
+      assert.match(await page.locator('#candidate-status').innerText(), /Automatic mask.*Unreviewed/);
       assert.equal(await page.locator('#registration-status').innerText(), 'Unverified');
       assert.ok(await colored() > 0);
       checks.push('Real automatic result is unreviewed, uses the requested published reference, and centers on a slice containing the POST mask.');
@@ -144,6 +151,7 @@ const path = require('node:path');
         try {
           await reload.goto(url + '/?case=HCC_002', {waitUntil: 'domcontentloaded'});
           await until(() => releasePre && listDelivered);
+          await openFollowup(reload, true);
           await reload.waitForFunction(() => document.getElementById('post-viewport').getAttribute('aria-busy') === 'false');
           await reload.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
           assert.equal(await reload.locator('#candidate-result').isHidden(), true,
@@ -182,7 +190,7 @@ const path = require('node:path');
     await page.locator('#candidate-generate').click(); const manualResponse = await manualEvent;
     assert.equal(manualResponse.status(), 201); manual = await manualResponse.json();
     await ready('post'); assert.ok(await colored() > 0);
-    assert.match(await page.locator('#candidate-status').innerText(), /Manual candidate/);
+    assert.match(await page.locator('#candidate-status').innerText(), /Seed-based mask/);
     await page.locator('.candidate-coordinates summary').click();
 
     // A real edited PRE artifact is deliberately displayed; the automatic API
@@ -196,6 +204,7 @@ const path = require('node:path');
     await page.locator('#pre-stack').selectOption('1'); await ready('pre');
     assert.equal(await page.locator('#candidate-saved').inputValue(), manual.id, 'PRE changes must not detach manual POST masks');
     await page.locator('#pre-stack').selectOption('0'); await ready('pre'); await page.waitForLoadState('networkidle');
+    await page.locator('#baseline-tab').click();
     await page.locator('#pre-edit-saved').selectOption(edited.id); await ready('pre');
     await page.locator('#pre .study-settings summary').click();
     assert.match(await page.locator('#pre-overlay-label').innerText(), /Edited copy/);
@@ -211,6 +220,7 @@ const path = require('node:path');
         intercepted = true; await new Promise(resolve => { resume = resolve; });
         await route.fulfill({status: automaticStatus, contentType: 'application/json', body: JSON.stringify(realResponse)});
       };
+      await openFollowup(page, true);
       await page.route('**/api/automatic-post-candidates', handler);
       const event = page.waitForResponse(r => r.url().endsWith('/api/automatic-post-candidates'));
       await page.locator('#candidate-automatic').click(); await until(() => intercepted && resume);
@@ -232,7 +242,7 @@ const path = require('node:path');
       assert.equal(await page.locator('#candidate-saved').inputValue(), manual.id);
       assert.equal(await page.locator('#post-image').getAttribute('src'), priorImage);
       assert.deepEqual(await manualFields(), priorDraft);
-      assert.match(await page.locator('#candidate-status').innerText(), /Manual candidate/);
+      assert.match(await page.locator('#candidate-status').innerText(), /Seed-based mask/);
     }
     await replay(async () => {
       await page.locator('#pre .study-settings summary').click();

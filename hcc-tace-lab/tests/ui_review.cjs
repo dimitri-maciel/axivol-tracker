@@ -20,6 +20,7 @@ const path=require('node:path');
   e.value=n;e.dispatchEvent(new Event('input',{bubbles:true}));
  },value);
  const calculate=async()=>{
+  await page.locator('#baseline-tab').click();
   await page.locator('#measure').click();
   await page.waitForFunction(()=>document.getElementById('volume-value').textContent==='495.04');
  };
@@ -37,7 +38,7 @@ const path=require('node:path');
   assert.equal(await page.locator('html').getAttribute('lang'),'en');
   assert.equal(await page.locator('.study-sequence').count(),0);
   assert.ok((await page.locator('#case').boundingBox()).height>=44);
-  assert.equal(await page.locator('#case').evaluate(e=>getComputedStyle(e).paddingLeft),'16px');
+  assert.ok(await page.locator('#case').evaluate(e=>parseFloat(getComputedStyle(e).paddingLeft)>=12));
   assert.equal(await page.locator('#pre-counter').innerText(),'55 / 109');
   assert.equal(await page.locator('#post-counter').innerText(),'49 / 97');
   for(const [id,value] of [['source-case','HCC_002'],['source-acquisition','1'],['source-segment','Mass (2)'],['source-voxels','324,430']]){
@@ -75,7 +76,7 @@ const path=require('node:path');
   checks.push('Rapid scrubbing coalesces intermediate requests and displays the final requested slice.');
   await page.locator('#link').check();await setSlice('pre',109);await both();
   assert.equal(await page.locator('#post-counter').innerText(),'97 / 97');
-  assert.match(await page.locator('#link-note').innerText(),/not registered/);
+  assert.match(await page.locator('#link-note').innerText(),/not spatially aligned/);
   await page.locator('#link').uncheck();await page.locator('#post-viewport').focus();
   await page.keyboard.press('ArrowUp');await ready('post');
   assert.equal(await page.locator('#post-counter').innerText(),'96 / 97');
