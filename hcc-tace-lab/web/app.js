@@ -1,6 +1,7 @@
 import {FrameLoader} from './frame-loader.js';
 import {createSegmentationEditor} from './segmentation-editor.js';
 import {createPreMaskEditor} from './pre-mask-editor.js';
+import {createLesionSurfaceDialog} from './lesion-surface.js';
 
 const $ = id => document.getElementById(id);
 const frames = new FrameLoader();
@@ -14,6 +15,7 @@ const state = {
 };
 const number = new Intl.NumberFormat('en-US', {maximumFractionDigits: 2});
 const integer = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
+const surfaceView = createLesionSurfaceDialog();
 const editor = createSegmentationEditor({
   ready: () => !!state.views.post?.ready,
   baselineSource,
@@ -130,6 +132,8 @@ function updatePreEditorSource() {
 }
 
 function reportLink() {
+  $('candidate-surface').disabled = !editor.candidate;
+  surfaceView.sync(editor.candidate);
   const available = state.case && stages.every(stage => state.views[stage]?.ready);
   $('capture').disabled = !available;
   $('report').setAttribute('aria-disabled', String(!available));
@@ -147,6 +151,13 @@ function reportLink() {
   if (preEditor.candidate) query.set('pre_candidate', preEditor.candidate.id);
   $('report').href = '/api/report?' + query;
 }
+
+$('candidate-surface').addEventListener('click', () => {
+  if (!editor.candidate) return;
+  editor.pause();
+  preEditor.pause();
+  surfaceView.open(editor.candidate);
+});
 
 function syncActions() {
   const stack = selection('pre');

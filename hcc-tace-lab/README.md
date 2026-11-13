@@ -34,7 +34,7 @@ Guarda o limpia los trazos manuales antes de refinar. El refinamiento y las nuev
 
 ## Generar una máscara POST automáticamente
 
-**Estado del código, 13 de noviembre de 2026:** versión `2.1.0`, protocolo `liver_context_medsam2_boundary`. Añade refinamiento 3D del borde POST en una banda fija de 2 mm. **Desplegada y comprobada:** 189/189 pruebas de backend, generación real de HCC_006 y siete grupos de comprobaciones de navegador en HCC_002/HCC_006. Se mantiene pendiente la validación anatómica independiente. Para actualizar otra instalación usa `docker compose up --build -d app`. Las 165/165 pruebas y comprobaciones UI previas de HCC_002/HCC_006 corresponden a `2.0.0`; no se trasladan a esta revisión ni constituyen validación anatómica.
+**Estado del código, 13 de noviembre de 2026:** versión `2.1.0`, protocolo `liver_context_medsam2_boundary`. Añade refinamiento 3D del borde POST en una banda fija de 2 mm. **Desplegada y comprobada:** 211/211 pruebas de backend, generación real de HCC_006 y siete grupos de comprobaciones de navegador en HCC_002/HCC_006. Se mantiene pendiente la validación anatómica independiente. Para actualizar otra instalación usa `docker compose up --build -d app`. Las 165/165 pruebas y comprobaciones UI previas de HCC_002/HCC_006 corresponden a `2.0.0`; no se trasladan a esta revisión ni constituyen validación anatómica.
 
 Selecciona las adquisiciones PRE y POST en **Study details**, y el segmento publicado `Mass` en **Segmentation**. Abre **Follow-up mask**, comprueba la referencia **Baseline reference** y pulsa **Generate automatically**. Se exige una única etiqueta `Liver` publicada y no vacía para el contexto anatómico. El proceso usa los segmentos originales incluso si el visor PRE muestra una copia editada o refinada.
 
@@ -49,6 +49,12 @@ La app muestra la candidata en POST y permite recorrer cortes, ocultar la superp
 **Automatic candidate · Unreviewed** significa propuesta para revisar. El registro calculado tampoco está verificado anatómicamente. No se interpreta como tumor viable ni se habilita un porcentaje de respuesta. Consulta la [guía completa de generación automática POST](docs/automatic-post-segmentation.md): geometría, ecuaciones, parámetros, límites, fuentes, código y evaluación pendiente.
 
 Para estudiar las decisiones y reproducir los ensayos están disponibles el [índice de investigación](docs/research/README.md), las [matemáticas del seguimiento](docs/research/post-mathematics.md), los [runners y sus comandos](experiments/README.md), el [registro histórico de resultados y fallos](experiments/ABLATION.md) y la [arquitectura actual](experiments/ARCHITECTURE.md). Los runners leen TC/SEG originales y guardan resultados fuera del almacén de candidatas; no necesitan una máscara anterior de la app.
+
+## Revisar la máscara POST por cortes y en 3D
+
+En **Segmentation → Follow-up**, selecciona una máscara guardada y pulsa **3D view**. Arrastra para girar, usa la rueda o los botones para acercar y **Reset view** para recuperar la cámara. La vista se carga solo al abrirla; no añade trabajo al recorrido habitual de cortes. Conserva el tamaño físico, todas las componentes y los escalones de la máscara nativa. No cambia la segmentación ni su estado **Unreviewed**.
+
+La [revisión de HCC_006 por cortes](docs/research/hcc006-slice-review.md) documenta los 16 planos ocupados y sus vecinos, con descriptores de los 103 cortes. Identifica una extensión gris de pertenencia incierta, una discontinuidad entre los cortes 55–56 del visor y pequeñas componentes y huecos. La [guía de la superficie 3D](docs/research/lesion-surface.md) explica geometría, controles, límites y pruebas. Ninguna de estas comprobaciones sustituye la referencia anatómica independiente.
 
 ## Generar una máscara POST con región y semilla
 

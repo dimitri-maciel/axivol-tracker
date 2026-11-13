@@ -19,6 +19,8 @@ STATIC = {
     '/frame-loader.js':('frame-loader.js','text/javascript; charset=utf-8'),
     '/segmentation-editor.js':('segmentation-editor.js','text/javascript; charset=utf-8'),
     '/pre-mask-editor.js':('pre-mask-editor.js','text/javascript; charset=utf-8'),
+    '/lesion-surface.js':('lesion-surface.js','text/javascript; charset=utf-8'),
+    '/lesion-surface.css':('lesion-surface.css','text/css; charset=utf-8'),
     '/html2canvas.min.js':('html2canvas.min.js','text/javascript; charset=utf-8'),
 }
 WEB = Path(__file__).resolve().parents[1]/'web'
@@ -131,6 +133,8 @@ def handler(lab: Lab):
                     raise ValueError('Select a source segment.')
                 return self.json(200, lab.list_pre_edits(q.get('case', [''])[0], q.get('series', [''])[0],
                                                        integer(q, 'stack', 0, 0, 999), segment))
+            if m := re.fullmatch(r'/api/candidates/([a-f0-9]{32})/surface', path):
+                return self.json(200, lab.candidate_surface(m[1]))
             if m := re.fullmatch(r'/api/candidates/([a-f0-9]{32})(/export)?', path):
                 candidate_id, export = m.groups()
                 document = lab.candidates.metadata(candidate_id)

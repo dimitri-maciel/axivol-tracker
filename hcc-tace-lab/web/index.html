@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#111820">
   <title>Axivol Tracker — Study comparison</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/lesion-surface.css">
 </head>
 <body>
   <a class="skip-link" href="#workspace">Skip to workspace</a>
@@ -153,7 +154,7 @@
                 <p id="candidate-source" class="field-hint"></p>
                 <div id="candidate-automatic-result" hidden><dl class="automatic-diagnostics"><div><dt>Registration</dt><dd>Unverified</dd></div><div><dt>Mask source</dt><dd>Follow-up CT</dd></div></dl><details class="automatic-source"><summary>Generation details</summary><dl class="source-details"><dt>Published baseline source</dt><dd id="candidate-reference-used">—</dd><dt>Baseline series UID</dt><dd id="candidate-reference-uid">—</dd></dl></details></div>
                 <label class="toggle-control" for="candidate-overlay"><input id="candidate-overlay" type="checkbox" checked><span class="swatch"></span>Show overlay</label>
-                <a id="candidate-export" class="button secondary" download>Download mask</a>
+                <div class="surface-mask-actions"><button id="candidate-surface" class="button secondary" disabled>3D view</button><a id="candidate-export" class="button secondary" download>Download mask</a></div>
               </div>
               <p id="candidate-empty" class="field-hint">No follow-up mask generated for this acquisition.</p>
             </div>

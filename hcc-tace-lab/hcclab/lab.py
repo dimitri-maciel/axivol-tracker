@@ -37,6 +37,7 @@ class Lab:
         self.catalog = Catalog(data)
         self.candidates = CandidateStore(annotations)
         self.segmentation_lock = Lock()
+        self.surface_lock = Lock()
 
     def row(self, uid):
         row = self.catalog.by_uid.get(uid)
@@ -340,6 +341,66 @@ class Lab:
     def list_candidates(self, case_id, uid, stack_index):
         self.post_stack(case_id, uid, stack_index)
         return {'candidates': self.candidates.list(case_id, uid, stack_index)}
+
+    def candidate_surface(self, candidate_id):
+        """Read-only 3D display of a saved POST mask, with current source checks.
+
+        The surface never enters measurement or segmentation. Geometry is cached
+        by immutable mask bytes and stack identity; source and file integrity
+        are checked even on a cache hit. No CT intensities are sent to WebGL.
+        """
+        document = self.candidates.metadata(candidate_id)
+        if document.get('stage', 'POST') != 'POST':
+            raise GeometryError('Select a saved follow-up mask for the 3D view.')
+        document = self.candidate_for_stack(candidate_id, document['series_uid'], document['stack_index'])
+        mask_path = self.candidates.folder(candidate_id) / 'mask.npz'
+        digest = document['mask_sha256']
+        if file_sha256(mask_path) != digest:
+            raise GeometryError('The saved candidate mask failed its integrity check.')
+        if not self.surface_lock.acquire(blocking=False):
+            raise ValueError('Another 3D surface is loading. Try again when it finishes.')
+        try:
+            surface = self._candidate_surface(candidate_id, digest, document['source']['stack_identity'])
+            if (surface['stats']['voxels'] != document['voxels']
+                    or not np.isclose(surface['stats']['native_volume_cm3'], document['volume_cm3'], rtol=1e-9, atol=1e-9)):
+                raise GeometryError('Mask measurements do not match the native 3D geometry.')
+            if file_sha256(mask_path) != digest:
+                raise GeometryError('The saved candidate changed while loading its surface.')
+            # Repeat source checks after mesh creation; no new segmentation is saved.
+            current = self.candidate_for_stack(candidate_id, document['series_uid'], document['stack_index'])
+            if current != document:
+                raise GeometryError('Candidate metadata changed while loading its surface.')
+            baseline = document.get('baseline_source')
+            return dict(surface, candidate_id=candidate_id, mask_sha256=digest,
+                        case_id=document['case_id'], series_uid=document['series_uid'],
+                        stack_index=document['stack_index'], acquisition=document['acquisition'],
+                        review_status='unreviewed', label=document['label'],
+                        source_metadata={'stack_identity': document['source']['stack_identity'],
+                                         'stage': 'POST',
+                                         'baseline_localization': None if baseline is None else {
+                                             'series_uid': baseline['series_uid'],
+                                             'acquisition': baseline['acquisition'],
+                                             'segment': baseline['source_segment'],
+                                             'label': baseline['source_segment_label']}},
+                        scope='Surface of the saved segmentation; not verified lesion anatomy or treatment response.')
+        finally:
+            self.surface_lock.release()
+
+    @lru_cache(maxsize=2)
+    def _candidate_surface(self, candidate_id, mask_sha256, source_identity):
+        from .surface import voxel_surface
+        document = self.candidates.metadata(candidate_id)
+        _, stack = self.stack(document['series_uid'], document['stack_index'])
+        if document['mask_sha256'] != mask_sha256 or stack_identity(stack) != source_identity:
+            raise GeometryError('The surface source changed. Reload the saved mask.')
+        # Decode the currently verified file, not the display cache keyed only
+        # by candidate ID. Even a coherent replacement under an existing ID
+        # must not pair a new content hash with an old decoded array.
+        with np.load(self.candidates.folder(candidate_id) / 'mask.npz', allow_pickle=False) as saved:
+            mask = saved['mask']
+        if list(mask.shape) != document['shape_zyx']:
+            raise GeometryError('The saved mask shape does not match its metadata.')
+        return voxel_surface(mask, stack)
 
     def create_automatic_post_candidate(self, payload):
         """Localize from published PRE, then segment native POST intensities.

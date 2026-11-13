@@ -10,6 +10,8 @@ Este espacio explica cómo investigar la delimitación de una lesión después d
 | 2 | [Evidencia y decisiones](post-tace-evidence.md) | ¿Qué tejido queremos delimitar, qué métodos ayudan y dónde falla la evidencia disponible? |
 | 3 | [Resultados de desarrollo](../../experiments/ABLATION.md) | ¿Qué ocurrió con HCC_006 y el control HCC_002 al cambiar contexto, ventana y registro? |
 | 3a | [Refinamiento del borde POST](post-boundary-refinement.md) | ¿Cómo cambia la máscara con logits, HU y una banda física de 2 mm, y qué sigue sin comprobarse? |
+| 3b | [Revisión HCC_006 por cortes](hcc006-slice-review.md) | ¿Dónde persisten prolongaciones ambiguas, discontinuidades, componentes y huecos? |
+| 3c | [Superficie 3D de la máscara](lesion-surface.md) | ¿Cómo revisar la geometría guardada sin suavizar ni cambiar la predicción? |
 | 4 | [Reproducir los experimentos](../../experiments/README.md) | ¿Cómo ejecutar el CLI y leer su manifiesto, máscaras y diagnósticos? |
 | 5 | [Modelos y comparadores](post-tace-models.md) | ¿Qué aportaron nnInteractive y TotalSegmentator y cuáles son sus costes y límites? |
 | 6 | [Referencia y validación](post-tace-validation.md) | ¿Cómo conseguir anotaciones independientes y evaluar sin contaminar la prueba? |
@@ -20,7 +22,7 @@ Para explicar el proyecto oralmente, conviene empezar por el objetivo de la lesi
 
 ## Aplicación, experimentos y validación
 
-Estado del código al 13 de noviembre de 2026: `2.1.0`, protocolo `liver_context_medsam2_boundary`. **Desplegada y comprobada:** 189/189 pruebas de backend y revisión de ambos visores en HCC_002/HCC_006. La validación anatómica independiente permanece pendiente.
+Estado del código al 13 de noviembre de 2026: `2.1.0`, protocolo `liver_context_medsam2_boundary`. **Desplegada y comprobada:** 211/211 pruebas de backend y revisión de ambos visores en HCC_002/HCC_006. La validación anatómica independiente permanece pendiente.
 
 | Estado | Contenido | Documento de referencia |
 | --- | --- | --- |
