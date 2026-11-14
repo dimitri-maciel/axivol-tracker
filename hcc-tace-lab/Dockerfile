@@ -41,3 +41,15 @@ RUN pip install --no-cache-dir --constraint /tmp/constraints-neural-research.txt
     && python -c "from experiments.nninteractive_refine import _verify_source; print(_verify_source())" \
     && rm /tmp/constraints-neural-research.txt
 USER lab
+
+# Independent axial MedSAM comparator; does not install the upstream setup.py.
+FROM app AS medsam-research
+USER root
+RUN pip install --no-cache-dir --constraint experiments/constraints-neural-research.txt \
+      scikit-image==0.26.0 matplotlib==3.11.2 \
+    && python -m experiments.prepare_medsam source --destination /opt/medsam \
+    && pip check
+ENV PYTHONPATH=/opt/medsam:/app TORCH_FORCE_WEIGHTS_ONLY_LOAD=1
+RUN python -c "from experiments.medsam_slice_refine import _verify_source; print(_verify_source())" \
+    && pip freeze --all > /usr/local/share/axivol-medsam-freeze.txt
+USER lab

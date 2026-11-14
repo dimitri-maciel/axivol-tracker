@@ -1,0 +1,26 @@
+{
+ "detector": "check_model_provenance",
+ "dossier": "hcc-tace-lab/docs/research/model-provenance/medsam-vit-b.json",
+ "model": "Original MedSAM ViT-B, Zenodo 10689643 version 1.0",
+ "n_arms": 1,
+ "claims": [
+  {
+   "verdict": "DEVELOPED_ON_UNSTATED",
+   "severity": "Major",
+   "detail": "no 'developed_on' recorded, so whether an evaluation arm reuses the model's own development benchmark could not be checked; record the paper's account of where the method was built and tuned (an empty list states it was none)",
+   "where": [],
+   "n_where": 0
+  },
+  {
+   "verdict": "WEIGHTS_PROVENANCE_UNKNOWN",
+   "severity": "Major",
+   "detail": "pretrained weights are used and the corpus behind them is not stated, so it cannot be established whether your evaluation data is inside them",
+   "where": [],
+   "n_where": 0
+  }
+ ],
+ "summary": {
+  "major": 2,
+  "minor": 0
+ }
+}

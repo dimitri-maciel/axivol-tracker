@@ -97,6 +97,10 @@ La [guía del experimento](../docs/research/post-neural-refinement.md) incluye l
 
 `plot_neural_refinement` conserva la TC nativa, compara antes/después y genera atlas, vistas ortogonales, focos 54–57 y CSV de todos los cortes. Las regiones fuera de la envolvente de escritura del modelo conservan la predicción inicial; no se presentan como regiones reevaluadas ni como ausencia confirmada de lesión.
 
+## Refinamiento MedSAM por corte
+
+El comparador adicional `post_medsam_slice` usa el MedSAM original ViT-B sobre los planos ya ocupados del baseline. Para cada corte, forma una caja a partir de ese corte y sus vecinos inmediatos, con margen físico fijo de 5 mm. Los demás planos se heredan y no se declaran reevaluados. Conserva probabilidades, predicciones completas y comparación por corte; no aplica otro graph cut. La [guía reproducible](../docs/research/post-medsam-slice-refinement.md) describe el entorno opcional `experiments/compose.medsam.yaml`, la preparación de pesos y las limitaciones de sus controles. No cambia las dependencias ni las candidatas de la app.
+
 ## Variantes declaradas
 
 | Variante | Registro | Contexto XY de entrada | Nivel/ancho HU |

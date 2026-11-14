@@ -60,6 +60,8 @@ La [investigación de los cortes 55–56](docs/research/post-prompt-conditioning
 
 El [comparador nnInteractive 3D](docs/research/post-neural-refinement.md) prueba otro enfoque: refinar la predicción POST completa con la TC POST nativa, sin puntos manuales ni volver a generar el baseline. Incluye un entorno Docker de investigación separado, pesos verificados y comparaciones antes/después de HCC_006 y HCC_002. Sus resultados siguen siendo experimentales y no sustituyen la máscara activa de la app.
 
+El [comparador MedSAM por corte](docs/research/post-medsam-slice-refinement.md) estudia un ajuste sin propagación temporal. Obtiene cajas automáticamente de la máscara POST congelada y sus vecinos; conserva explícitamente los planos no evaluados. La guía documenta las comparaciones y los controles adicionales que no pudieron prepararse, sin atribuirles una validación satisfactoria.
+
 ## Generar una máscara POST con región y semilla
 
 Actualiza el contenedor con `docker compose up --build -d app`. Debajo de los visores encontrarás **Follow-up mask**:

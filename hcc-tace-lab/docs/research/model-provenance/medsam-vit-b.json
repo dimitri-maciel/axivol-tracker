@@ -1,0 +1,136 @@
+{
+  "model": "Original MedSAM ViT-B, Zenodo 10689643 version 1.0",
+  "intended_use": "research",
+  "source": {
+    "kind": "github",
+    "url": "https://github.com/bowang-lab/MedSAM",
+    "commit": "d71e8a1a99ad751840a22a7fa3ecfb4166fb1488",
+    "archive_bytes": 33327385,
+    "archive_sha256": "71fb5ac457805d9c0df0df0833b1bbd6a3da9489795b1d5b6c3a6377f11ef916",
+    "selected_package": "segment_anything",
+    "python_files": 15,
+    "python_tree_sha256": "b471fbce67496842f908f606dbe50205b3288c90ed9d99a0ab5f7455d110440e",
+    "installation_note": "Only the verified official Python package is exposed through PYTHONPATH; setup.py is not executed because it invokes extra package installation and CUDA-specific dependencies."
+  },
+  "licence": {
+    "spdx": "Apache-2.0 AND CC-BY-4.0",
+    "verified_from": "Code LICENSE at pinned GitHub commit; weight license attached to official Zenodo record 10689643 (metadata.license.id=cc-by-4.0), not a LICENSE file inside the checkpoint.",
+    "code_url": "https://github.com/bowang-lab/MedSAM/blob/d71e8a1a99ad751840a22a7fa3ecfb4166fb1488/LICENSE",
+    "weights_record_url": "https://zenodo.org/api/records/10689643",
+    "distribution_note": "The Google Drive distribution had a research-only readme. This dossier identifies the Zenodo artifact and does not assume that terms or bytes of other distributions are identical."
+  },
+  "weights": {
+    "pretrained": true,
+    "url": "https://zenodo.org/records/10689643/files/medsam_vit_b.pth?download=1",
+    "revision": "Zenodo 10689643 v1.0, published 2024-02-21",
+    "file": "medsam_vit_b.pth",
+    "bytes": 375049145,
+    "published_md5": "3bb6db55bd0c9ca30b61248bca72f8d6",
+    "sha256": "34b34b78c1d18cb8c6bf84cf9c00e135d6d6c965699f3c0e31ef1bc9dcb5be74",
+    "digest_verified_locally": true,
+    "training_provenance_note": "The paper describes 1570263 medical image-mask pairs and lists datasets in supplementary tables. An exhaustive patient-level training/development manifest for this exact deposited artifact has not been audited. HCC-TACE-Seg is explicitly marked external validation in Supplementary Table 1, not training.",
+    "loader_policy": "Official loader under TORCH_FORCE_WEIGHTS_ONLY_LOAD=1; no fallback to unrestricted deserialization.",
+    "static_pickle_globals": [
+      "collections OrderedDict",
+      "torch FloatStorage",
+      "torch._utils _rebuild_tensor_v2"
+    ],
+    "static_inspection_is_not_execution_safety_proof": true
+  },
+  "task": {
+    "model": "2d_box_prompted_medical_segmentation",
+    "study": "2d_box_prompted_medical_segmentation",
+    "transfer_note": "POST-TACE lesion refinement on initially occupied axial planes; automatic boxes from a prior POST prediction, not independent expert boxes. Native 3D output does not make the model a volumetric detector."
+  },
+  "paper": {
+    "title": "Segment anything in medical images",
+    "authors": ["Jun Ma", "Yuting He", "Feifei Li", "Lin Han", "Chenyu You", "Bo Wang"],
+    "journal": "Nature Communications",
+    "year": 2024,
+    "doi": "10.1038/s41467-024-44824-z",
+    "verified_from": "https://api.crossref.org/works/10.1038/s41467-024-44824-z"
+  },
+  "reported_validation": [
+    {
+      "dataset": "HCC-TACE-Seg",
+      "metric": "Dice; no patient-specific or POST accuracy transferred to this study",
+      "role": "external validation in the original paper",
+      "scans_reported": 70,
+      "source": "Supplementary Table 1 (asterisk denotes external validation), Table 16 (TCIA collection link), and paper validation methods",
+      "source_url": "https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-024-44824-z/MediaObjects/41467_2024_44824_MOESM1_ESM.pdf"
+    }
+  ],
+  "development_provenance_note": "Do not misclassify the paper's external HCC-TACE-Seg benchmark as training or tuning. The complete developed_on list is intentionally unstated pending a full artifact audit; this is an uncertainty, not an assertion that the model used no development data.",
+  "evaluation_arms": [
+    {
+      "name": "dependent POST refinement engineering comparison; reuse of a published benchmark collection",
+      "dataset": "HCC-TACE-Seg",
+      "target_case": "HCC_006",
+      "control_cases": ["HCC_002"],
+      "additional_control": "HCC_005 baseline preparation failed before model inference because the localized native ROI exceeded four million voxels. The sole replacement HCC_004 also failed baseline preparation at rigid-registration overlap or motion checks. Neither reached MedSAM; no further controls are sought under this protocol.",
+      "independent_post_reference": false,
+      "may_claim": "Native execution, descriptive changes, technical consistency, and measured resource use only",
+      "may_not_claim": "New independent external validation, anatomical accuracy, clinical non-inferiority, treatment response, or generalization to all 105 cases"
+    }
+  ],
+  "hardware": {
+    "claimed": "Official inference script accepts an explicit CPU device",
+    "verified": true,
+    "verified_on": "Docker research image, Python 3.12.16, Linux aarch64, torch 2.5.1, two CPU threads, 7 GiB container limit; HCC_006 completed 16 initially occupied native planes and HCC_002 completed 41",
+    "note": "HCC_006 completed in 185.4188570419974 seconds, peak process RSS 3630.19921875 MiB; HCC_002 completed in 466.888966044 seconds, peak process RSS 3624.140625 MiB. This verifies execution only, not anatomical accuracy or performance on all cases."
+  },
+  "local_experiments": [
+    {
+      "run_id": "run-20261114T023737-c4d0ac1e",
+      "case_id": "HCC_006",
+      "post_acquisition": "1",
+      "historical_baseline_pre_acquisition": "3",
+      "historical_mass_segment": 2,
+      "shape_zyx": [103, 512, 512],
+      "processed_slice_indices_inclusive": [49, 64],
+      "processed_plane_count": 16,
+      "unprocessed_plane_count": 87,
+      "unprocessed_scope": "inherited_baseline_not_reevaluated_not_confirmed_absence",
+      "baseline_mask_sha256": "511fcc15336070f0aae794e418e97edcea5af7e5fca0188b60e2217c813bf940",
+      "after_mask_npz_sha256": "8c0bc5624eec696e8cc853677245710d3899a077761d07fedc5461fcc72c8181",
+      "before_voxels": 11355,
+      "after_voxels": 10923,
+      "added_voxels": 2108,
+      "removed_voxels": 2540,
+      "source_integrity_verified": true,
+      "probability_threshold_native_mask_exact": true,
+      "anatomical_accuracy_verified": false,
+      "adopted_in_application": false
+    },
+    {
+      "run_id": "run-20261114T024116-d900e4a7",
+      "case_id": "HCC_002",
+      "post_acquisition": "1",
+      "historical_baseline_pre_acquisition": "1",
+      "historical_mass_segment": 2,
+      "shape_zyx": [97, 512, 512],
+      "processed_slice_indices_inclusive": [46, 86],
+      "processed_plane_count": 41,
+      "unprocessed_plane_count": 56,
+      "unprocessed_scope": "inherited_baseline_not_reevaluated_not_confirmed_absence",
+      "baseline_mask_sha256": "6fbe0b8318d6820707c5f59169a9f3a8e729a0121656a80dff09fcd6e07d04a6",
+      "after_mask_npz_sha256": "ffd5e75ee8a0b64a0071d9ccec006391f12edaa1c9350c576ae6175eff5aeeef",
+      "before_voxels": 413118,
+      "after_voxels": 435835,
+      "added_voxels": 51609,
+      "removed_voxels": 28892,
+      "source_integrity_verified": true,
+      "probability_threshold_native_mask_exact": true,
+      "anatomical_accuracy_verified": false,
+      "adopted_in_application": false
+    }
+  ],
+  "protocol": "../post-medsam-slice-refinement.md",
+  "limitations": [
+    "HCC-TACE-Seg was already an external benchmark of the published method; this is not a new independent collection-level validation.",
+    "The source does not establish which HCC patients/scans formed the 70-scan benchmark or validate this POST-TACE target.",
+    "The initial mask determines occupied planes and per-plane neighboring-union boxes; the new result is not independent of that prediction.",
+    "Non-inferred planes inherit the prior and cannot establish lesion absence or discover new z extent.",
+    "A provenance gate finding is not proof of training contamination, nor a clinical performance assessment."
+  ]
+}

@@ -1,0 +1,68 @@
+# Merge with the project file: docker compose -f compose.yaml -f experiments/compose.medsam.yaml ...
+# No app service is overridden. Models and local outputs remain outside the image.
+services:
+  medsam-research:
+    profiles: [research]
+    image: hcc-tace-medsam-research
+    build:
+      context: .
+      target: medsam-research
+    user: "${HCC_UID:-501}:${HCC_GID:-20}"
+    init: true
+    network_mode: none
+    cpus: 2
+    mem_limit: 7g
+    memswap_limit: 7g
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    environment:
+      XDG_CACHE_HOME: /tmp/cache
+      MPLCONFIGDIR: /tmp/matplotlib
+    volumes:
+      - type: bind
+        source: ${HCC_DATA_DIR:-./data}
+        target: /data
+        read_only: true
+      - type: bind
+        source: ${HCC_MEDSAM_MODEL_ROOT:?Set an absolute directory for the public model files}
+        target: /models
+        read_only: true
+      - type: bind
+        source: ${HCC_MEDSAM_BASELINE:?Set the absolute frozen baseline run directory}
+        target: /baseline
+        read_only: true
+      - type: bind
+        source: ${HCC_MEDSAM_OUTPUT:?Set an absolute writable experiment output directory}
+        target: /research-output
+    command:
+      - python
+      - -m
+      - experiments.post_medsam_slice
+      - --data
+      - /data
+      - --baseline
+      - /baseline
+      - --model-dir
+      - /models
+      - --output
+      - /research-output
+
+  # Explicit network-enabled setup only. It has no CT, baseline or annotation mounts.
+  medsam-assets:
+    profiles: [research-setup]
+    image: hcc-tace-medsam-research
+    build:
+      context: .
+      target: medsam-research
+    user: "${HCC_UID:-501}:${HCC_GID:-20}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    volumes:
+      - type: bind
+        source: ${HCC_MEDSAM_MODEL_ROOT:?Set an absolute directory for the public model files}
+        target: /models
+    command: [python, -m, experiments.prepare_medsam, weights, --destination, /models]
