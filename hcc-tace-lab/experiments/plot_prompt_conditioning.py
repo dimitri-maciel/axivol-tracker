@@ -35,18 +35,8 @@ CHANGES = {
 }
 
 
-def read_inputs(data, run):
-    """Bind artifact hashes to fresh native CT bytes, geometry and ordered SOPs."""
-    run = run.resolve()
-    manifest_path = run/'manifest.json'
-    manifest_hash = file_sha256(manifest_path)
-    manifest = read_json(manifest_path)
-    if (manifest.get('schema_version') != 1 or manifest.get('kind') != 'post_prompt_conditioning'
-            or manifest.get('status') != 'completed' or manifest.get('source_integrity_verified') is not True
-            or manifest.get('replay_exact') is not True or manifest.get('boundary_band_mm') != 2
-            or manifest.get('registration_recomputed') is not False
-            or manifest.get('primary_change') not in CHANGES):
-        raise ValueError('A completed, source-verified frozen comparison with exact replay and 2-mm refinement is required.')
+def load_verified_post(data, manifest):
+    """Read the recorded chronological POST stack without changing native geometry."""
     source, selection = manifest['sources'], manifest['selection']
     if source['case_id'] != manifest['case_id'] or source['selection'] != selection or source['target_label'] != 'Mass':
         raise ValueError('Experiment case, selection and published target disagree.')
@@ -78,6 +68,24 @@ def read_inputs(data, run):
         raise ValueError('Recorded POST hashes differ before and after the experiment.')
     hu, valid = load_hu_volume(stack, return_validity=True, expected_series_uid=uid,
                                expected_study_uid=row['StudyInstanceUID'])
+    return {'hu': hu, 'valid': valid, 'spacing': spacing, 'ct_paths': paths, 'ct_hashes': hashes}
+
+
+def read_inputs(data, run):
+    """Bind artifact hashes to fresh native CT bytes, geometry and ordered SOPs."""
+    run = run.resolve()
+    manifest_path = run/'manifest.json'
+    manifest_hash = file_sha256(manifest_path)
+    manifest = read_json(manifest_path)
+    if (manifest.get('schema_version') != 1 or manifest.get('kind') != 'post_prompt_conditioning'
+            or manifest.get('status') != 'completed' or manifest.get('source_integrity_verified') is not True
+            or manifest.get('replay_exact') is not True or manifest.get('boundary_band_mm') != 2
+            or manifest.get('registration_recomputed') is not False
+            or manifest.get('primary_change') not in CHANGES):
+        raise ValueError('A completed, source-verified frozen comparison with exact replay and 2-mm refinement is required.')
+    loaded = load_verified_post(data, manifest)
+    hu, valid, spacing, paths, hashes = (loaded[key] for key in ('hu', 'valid', 'spacing', 'ct_paths', 'ct_hashes'))
+    shape = hu.shape
     artifacts = {name: verified_artifact(run, name, manifest) for name in (*MASK_FILES.values(), 'comparison.json')}
     masks = {key: read_mask(artifacts[name], shape) for key, name in MASK_FILES.items()}
     if any(np.any(mask & ~valid) for mask in masks.values()):
@@ -163,7 +171,7 @@ def replay_description(comparison):
     return 'Baseline replay exact.' if exact else 'Baseline replay not exact or not established; exploratory comparison.'
 
 
-def make_figure(inputs, planes, bounds, window, title):
+def make_figure(inputs, planes, bounds, window, title, *, column_labels=None, method_caption=None, evidence_caption=None):
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
@@ -207,7 +215,11 @@ def make_figure(inputs, planes, bounds, window, title):
             label = f'App {plane["index"]+1}\nz={plane["index"]}' if axis == 0 else (
                 f'Native {"XZ" if axis == 1 else "YZ"}\n{"y" if axis == 1 else "x"}={plane["index"]}')
             axes[row, 0].set_ylabel(label, rotation=0, ha='right', va='center', labelpad=11)
-        before_label, after_label = CHANGES[manifest['primary_change']]
+        before_label, after_label = column_labels or CHANGES[manifest['primary_change']]
+        if method_caption is None:
+            method_caption = 'Both masks: 2 mm refinement.'
+        if evidence_caption is None:
+            evidence_caption = 'Experimental comparison. '+replay_description(inputs['comparison'])
         for ax, heading in zip(axes[0], ('POST CT', before_label, after_label, 'Added / removed')):
             ax.set_title(heading, fontsize=10, fontweight='bold', pad=9)
         selection = manifest['selection']
@@ -215,12 +227,42 @@ def make_figure(inputs, planes, bounds, window, title):
                      ha='left', fontsize=15, fontweight='bold')
         fig.text(.09, 1-.48/fig.get_figheight(), f'POST acquisition {selection["post_acquisition"]}; '
                  f'localization: PRE acquisition {selection["pre_acquisition"]}, Mass segment {selection["mass_segment"]}. '
-                 f'Both masks: 2 mm refinement. W{window["width_hu"]} L{window["level_hu"]}.', fontsize=9, va='top')
-        fig.text(.09, 1-.76/fig.get_figheight(), 'Experimental comparison. '+replay_description(inputs['comparison']), fontsize=9, va='top')
+                 f'{method_caption} W{window["width_hu"]} L{window["level_hu"]}.', fontsize=9, va='top')
+        fig.text(.09, 1-.76/fig.get_figheight(), evidence_caption, fontsize=9, va='top')
         fig.text(.09, .043, 'Cyan: before. Amber: after. Pink: added. Blue: removed. '
                  'Native pixels and physical aspect; exact internal pixel contours, no smoothing.', fontsize=8)
         fig.text(.09, .022, 'No independent POST reference. Differences do not establish anatomical accuracy or treatment response.', fontsize=8)
     return fig
+
+
+def save_figures(inputs, selection, folder, **figure_options):
+    """Export shared native views; keep font settings active until PDF finalization."""
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
+
+    def save_panel(name, planes, window, title):
+        figure = make_figure(inputs, planes, selection['bounds'], window, title, **figure_options)
+        for suffix in ('png', 'pdf'):
+            with (folder/f'{name}.{suffix}').open('xb') as stream:
+                # Font embedding is selected at export, after make_figure's style context.
+                with plt.rc_context({'pdf.fonttype': 42}):
+                    figure.savefig(stream, format=suffix, dpi=150)
+        plt.close(figure)
+
+    if selection['focus']:
+        for window in WINDOWS:
+            save_panel(f'focus-W{window["width_hu"]}', selection['focus'], window, 'Requested axial review: app slices 54–57')
+    save_panel('orthogonal', selection['orthogonal'], WINDOWS[0], 'Orthogonal views at the union centroid')
+    # PdfPages embeds fonts when closing, so the context must cover finalization too.
+    with plt.rc_context({'pdf.fonttype': 42}), (folder/'atlas.pdf').open('xb') as stream, PdfPages(stream) as pdf:
+        for page, offset in enumerate(range(0, len(selection['atlas_indices']), 5), 1):
+            planes = [{'axis': 0, 'index': z, 'selection': 'complete_union_extent_plus_three'}
+                      for z in selection['atlas_indices'][offset:offset+5]]
+            figure = make_figure(inputs, planes, selection['bounds'], WINDOWS[0], f'Complete occupied extent · page {page}', **figure_options)
+            with (folder/f'atlas-{page:02d}.png').open('xb') as image:
+                figure.savefig(image, format='png', dpi=150)
+            pdf.savefig(figure)
+            plt.close(figure)
 
 
 def main():
@@ -242,32 +284,7 @@ def main():
         writer = csv.DictWriter(stream, fieldnames=list(rows[0])); writer.writeheader(); writer.writerows(rows)
     with (folder/'slices.json').open('x') as stream:
         json.dump(rows, stream, indent=2, allow_nan=False); stream.write('\n')
-    import matplotlib.pyplot as plt
-    from matplotlib.backends.backend_pdf import PdfPages
-
-    def save_panel(name, planes, window, title):
-        figure = make_figure(inputs, planes, selection['bounds'], window, title)
-        for suffix in ('png', 'pdf'):
-            with (folder/f'{name}.{suffix}').open('xb') as stream:
-                # Font embedding is selected at export, after make_figure's style context.
-                with plt.rc_context({'pdf.fonttype': 42}):
-                    figure.savefig(stream, format=suffix, dpi=150)
-        plt.close(figure)
-
-    if selection['focus']:
-        for window in WINDOWS:
-            save_panel(f'focus-W{window["width_hu"]}', selection['focus'], window, 'Requested axial review: app slices 54–57')
-    save_panel('orthogonal', selection['orthogonal'], WINDOWS[0], 'Orthogonal views at the union centroid')
-    # PdfPages embeds fonts when closing, so the context must cover finalization too.
-    with plt.rc_context({'pdf.fonttype': 42}), (folder/'atlas.pdf').open('xb') as stream, PdfPages(stream) as pdf:
-        for page, offset in enumerate(range(0, len(selection['atlas_indices']), 5), 1):
-            planes = [{'axis': 0, 'index': z, 'selection': 'complete_union_extent_plus_three'}
-                      for z in selection['atlas_indices'][offset:offset+5]]
-            figure = make_figure(inputs, planes, selection['bounds'], WINDOWS[0], f'Complete occupied extent · page {page}')
-            with (folder/f'atlas-{page:02d}.png').open('xb') as image:
-                figure.savefig(image, format='png', dpi=150)
-            pdf.savefig(figure)
-            plt.close(figure)
+    save_figures(inputs, selection, folder)
     verify_inputs(inputs['ct_paths'], inputs['ct_hashes'], inputs['manifest_path'],
                   inputs['manifest_sha256'], inputs['artifacts'], inputs['manifest'])
     record = {'schema_version': 1, 'kind': 'post_prompt_conditioning_visual_review',

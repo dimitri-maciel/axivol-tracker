@@ -33,6 +33,8 @@ Las licencias de código se leyeron en los archivos `LICENSE` de los commits ind
 
 ## nnInteractive: receta y límites
 
+**Nuevo ensayo:** el [refinamiento desde una máscara POST completa](post-neural-refinement.md) usa la API de etiqueta inicial del mismo checkpoint. Es distinto de los pilotos con caja descritos abajo: recibe una predicción POST previa, por lo que no es un comparador independiente de esa predicción. Dispone de runner, entorno Docker opcional y preparación verificada de pesos en `experiments/`.
+
 El [artículo original](https://arxiv.org/abs/2503.08373v1) describe segmentación 3D interactiva. Se verificó su registro en la API de arXiv; no se atribuye un DOI de revista. El listado completo de datos usados para desarrollar el checkpoint descargado no quedó establecido. Por tanto, **no puede afirmarse que HCC-TACE sea una validación externa independiente** de este modelo.
 
 Artefactos fijos:
@@ -141,7 +143,7 @@ Se conserva MedSAM2 con contexto local y registro hepático como **candidata exp
 
 ## Reproducibilidad y siguiente decisión
 
-Los prototipos de estos comparadores, entornos, pesos, imágenes y resultados locales se mantienen fuera de Git, en `tmp/post-improvement/nninteractive` y `tmp/post-improvement/totalseg`. Estos prototipos concretos no se promueven a producción ni se presentan como runners reproducibles ya publicados. La versión MedSAM adoptada sí dispone de un runner en `experiments/`; para los comparadores se conservan las recetas, pines y registros de este informe. Los manifiestos enumeran URLs, revisiones, tamaños y hashes; los resultados registran caso, serie, adquisición, fuente PRE, geometría y parámetros. Estos comparadores no escribieron ninguna candidata en las anotaciones de producción. La auditoría final de sus cuatro matrices guardadas confirmó forma nativa, correspondencia física y SOP de nnInteractive, coincidencia de hashes CT para TotalSegmentator y cero predicciones sobre padding inválido. Esta comprobación posterior no sustituye hashes antes/después ausentes en los primeros pilotos.
+Los prototipos históricos de caja y órganos, entornos, pesos, imágenes y resultados locales se mantienen fuera de Git, en `tmp/post-improvement/nninteractive` y `tmp/post-improvement/totalseg`. Estos prototipos concretos no se promueven a producción ni se presentan como runners reproducibles ya publicados. La versión MedSAM adoptada y el nuevo comparador nnInteractive con etiqueta inicial sí disponen de runners en `experiments/`; para los pilotos históricos se conservan las recetas, pines y registros de este informe. Los manifiestos enumeran URLs, revisiones, tamaños y hashes; los resultados registran caso, serie, adquisición, fuente PRE, geometría y parámetros. Estos comparadores no escribieron ninguna candidata en las anotaciones de producción. La auditoría final de sus cuatro matrices guardadas confirmó forma nativa, correspondencia física y SOP de nnInteractive, coincidencia de hashes CT para TotalSegmentator y cero predicciones sobre padding inválido. Esta comprobación posterior no sustituye hashes antes/después ausentes en los primeros pilotos.
 
 Los dossiers y el informe del verificador se encuentran en `docs/research/model-provenance`. Los datos de entrenamiento o validación desconocidos se dejan ausentes para que el verificador los señale: rellenarlos con una lista vacía habría afirmado incorrectamente que no existen.
 

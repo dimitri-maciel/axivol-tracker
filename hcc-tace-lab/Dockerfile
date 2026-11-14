@@ -25,3 +25,19 @@ RUN useradd --system --uid 10001 --no-create-home lab \
 USER lab
 EXPOSE 8000
 CMD ["python", "-m", "hcclab.server", "--data", "/data", "--host", "0.0.0.0"]
+
+# Optional, isolated research environment; compose.yaml still targets `app`.
+FROM app AS neural-research
+USER root
+COPY experiments/constraints-neural-research.txt /tmp/constraints-neural-research.txt
+RUN pip install --no-cache-dir --constraint /tmp/constraints-neural-research.txt setuptools==84.2.1 \
+    && pip install --no-cache-dir --no-build-isolation \
+       --constraint /tmp/constraints-neural-research.txt \
+       --report /usr/local/share/axivol-neural-install.json \
+       'nninteractive-client @ https://codeload.github.com/MIC-DKFZ/nnInteractive/tar.gz/e3126a029f46dcfd798c8428eec292f52cd438d6#sha256=75e05e4c345bff997e28f7f770e937031446c61f4aa1ccf93b7f5864b1acb064&subdirectory=client' \
+       'nnInteractive @ https://codeload.github.com/MIC-DKFZ/nnInteractive/tar.gz/e3126a029f46dcfd798c8428eec292f52cd438d6#sha256=75e05e4c345bff997e28f7f770e937031446c61f4aa1ccf93b7f5864b1acb064' \
+    && pip check \
+    && pip freeze --all > /usr/local/share/axivol-neural-freeze.txt \
+    && python -c "from experiments.nninteractive_refine import _verify_source; print(_verify_source())" \
+    && rm /tmp/constraints-neural-research.txt
+USER lab

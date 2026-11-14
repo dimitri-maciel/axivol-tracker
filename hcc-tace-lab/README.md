@@ -58,6 +58,8 @@ La [revisión de HCC_006 por cortes](docs/research/hcc006-slice-review.md) docum
 
 La [investigación de los cortes 55–56](docs/research/post-prompt-conditioning.md) compara el condicionamiento inicial, la política de seguimiento y la preparación de la entrada con una localización congelada. Cada comparación exige reproducir exactamente la máscara anterior y conserva resultados, diferencias por corte y fuentes verificadas. Las variantes experimentales no sustituyen automáticamente la candidata guardada.
 
+El [comparador nnInteractive 3D](docs/research/post-neural-refinement.md) prueba otro enfoque: refinar la predicción POST completa con la TC POST nativa, sin puntos manuales ni volver a generar el baseline. Incluye un entorno Docker de investigación separado, pesos verificados y comparaciones antes/después de HCC_006 y HCC_002. Sus resultados siguen siendo experimentales y no sustituyen la máscara activa de la app.
+
 ## Generar una máscara POST con región y semilla
 
 Actualiza el contenedor con `docker compose up --build -d app`. Debajo de los visores encontrarás **Follow-up mask**:

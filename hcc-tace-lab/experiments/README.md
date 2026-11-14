@@ -1,6 +1,6 @@
 # Experimentos POST reproducibles
 
-Este módulo investiga por qué cambia una predicción cuando cambian el contexto, la ventana de imagen o la localización. Lee las TC y el SEG originales mediante el catálogo de Axivol. **No necesita una candidata previa, un identificador de anotación ni el directorio de cuarentena. No guarda resultados en la aplicación.**
+Este módulo investiga por qué cambia una predicción cuando cambian el contexto, la ventana de imagen, la localización o el modelo. Lee las TC y el SEG originales mediante el catálogo de Axivol. **No necesita un identificador de anotación ni el directorio de cuarentena. No guarda resultados en la aplicación.** Los comparadores de condicionamiento y refinamiento neural sí requieren un baseline experimental congelado.
 
 La máscara PRE `Mass` proporciona centro y caja. La variante hepática usa `Liver ∪ Mass` PRE únicamente para refinar el registro. Todas las máscaras de salida se calculan con intensidades POST. No hay una referencia POST independiente: los números describen ejecución y sensibilidad, no exactitud anatómica ni respuesta al tratamiento.
 
@@ -88,6 +88,14 @@ python -m experiments.plot_prompt_conditioning \
 ```
 
 Produce comparaciones axiales de los cortes 54–57, planos coronal y sagital, atlas de toda la extensión de ambas máscaras con vecinos, y descriptores de **todos** los cortes adquiridos en CSV/JSON. Las ventanas de visualización W400/L40 y W800/L200 se mantienen iguales entre brazos y no cambian la ventana usada para inferir. Los contornos corresponden a los píxeles originales, sin suavizado de presentación. Antes/después significa versiones del algoritmo sobre la misma TC POST, nunca evolución del tumor ni precisión frente a una referencia.
+
+## Otro modelo: refinamiento neural 3D
+
+`post_neural_refinement` usa nnInteractive con la máscara POST completa de un ensayo `post_boundary` como etiqueta inicial y las intensidades POST nativas. Conserva exactamente los bytes del baseline; no repite MedSAM2 ni el registro. No introduce puntos, cajas manuales ni otro filtro de borde después de la red.
+
+La [guía del experimento](../docs/research/post-neural-refinement.md) incluye los comandos de instalación, inferencia y figuras con `compose.yaml` y `experiments/compose.neural.yaml`. La imagen opcional `neural-research` separa estas dependencias de la aplicación. El servicio de inferencia no tiene red ni acceso a las anotaciones; únicamente las salidas son escribibles. La preparación de pesos requiere una acción explícita y verifica revisión, tamaños y SHA-256 antes de usar el modelo.
+
+`plot_neural_refinement` conserva la TC nativa, compara antes/después y genera atlas, vistas ortogonales, focos 54–57 y CSV de todos los cortes. Las regiones fuera de la envolvente de escritura del modelo conservan la predicción inicial; no se presentan como regiones reevaluadas ni como ausencia confirmada de lesión.
 
 ## Variantes declaradas
 
