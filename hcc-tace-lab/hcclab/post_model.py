@@ -114,8 +114,11 @@ def _check_localization_consistency(mask, roi, diagnostics):
 
 class _NativeFrames:
     """Normaliza un corte a demanda; evita materializar N×3×512×512 floats."""
-    def __init__(self, hu, valid, torch_module):
+    def __init__(self, hu, valid, torch_module, *, input_mode='float_bilinear'):
+        if type(input_mode) is not str or input_mode not in ('float_bilinear', 'upstream_uint8'):
+            raise ValueError('Input mode must be float_bilinear or upstream_uint8.')
         self.hu, self.valid, self.torch = hu, valid, torch_module
+        self.input_mode = input_mode
 
     def __len__(self):
         return len(self.hu)
@@ -126,14 +129,27 @@ class _NativeFrames:
         plane = np.clip((self.hu[index].astype(np.float32)-low)/WINDOW_WIDTH_HU, 0, 1)
         if self.valid is not None:
             plane[~self.valid[index]] = 0
-        image = torch.from_numpy(plane)[None, None]
-        if tuple(plane.shape) != (MODEL_SIZE, MODEL_SIZE):
-            image = torch.nn.functional.interpolate(image, size=(MODEL_SIZE, MODEL_SIZE),
-                                                     mode='bilinear', align_corners=False)
-        image = image[0].repeat(3, 1, 1)
+        if self.input_mode == 'upstream_uint8':
+            from PIL import Image
+            # El script RECIST oficial recibe un NPZ ya en [0,255]. Aquí
+            # mantenemos nuestra ventana HU fija; su cuantización es explícita.
+            pixels = (plane * 255).astype(np.uint8)  # Truncar, no redondear.
+            rgb = Image.fromarray(pixels).convert('RGB')
+            if tuple(plane.shape) != (MODEL_SIZE, MODEL_SIZE):
+                rgb = rgb.resize((MODEL_SIZE, MODEL_SIZE), resample=Image.Resampling.BICUBIC)
+            # Su loader normaliza float64 con constantes float32 y el extractor
+            # convierte después a float32. Preservar ese orden evita otra ablación.
+            image = torch.from_numpy(np.asarray(rgb, dtype=np.float64).transpose(2, 0, 1).copy() / 255)
+        else:
+            image = torch.from_numpy(plane)[None, None]
+            if tuple(plane.shape) != (MODEL_SIZE, MODEL_SIZE):
+                image = torch.nn.functional.interpolate(image, size=(MODEL_SIZE, MODEL_SIZE),
+                                                         mode='bilinear', align_corners=False)
+            image = image[0].repeat(3, 1, 1)
         mean = torch.tensor([.485, .456, .406])[:, None, None]
         std = torch.tensor([.229, .224, .225])[:, None, None]
-        return (image-mean)/std
+        normalized = (image-mean)/std
+        return normalized.float() if self.input_mode == 'upstream_uint8' else normalized
 
 
 def _get_predictor(checkpoint_path):
@@ -172,7 +188,8 @@ def _field_contacts(mask, low, high):
 
 
 def segment_post_model(post_hu, spacing_zyx, location, *, checkpoint_path, valid_mask=None,
-                       refine_boundary=True, intermediates=None):
+                       refine_boundary=True, intermediates=None, prompt_mode='binary_reinjection',
+                       input_mode='float_bilinear'):
     """Devuelve máscara bool nativa y diagnóstico; nunca recibe píxeles/SEG PRE.
 
 Los controles aquí verifican ejecución, geometría, cobertura y coherencia espacial, no exactitud
@@ -181,11 +198,23 @@ anatómica. La candidata sigue unreviewed aunque todos estos controles pasen.
 ``intermediates`` permite al CLI experimental conservar logits y máscara cruda
 del campo realmente inferido. No contiene puntuaciones ficticias fuera de él.
 ``refine_boundary=False`` es el comparador explícito, no una salida de respaldo.
+``prompt_mode='binary_reinjection'`` conserva el protocolo previo. La variante
+experimental ``'box'`` propaga directamente desde la caja en cada dirección,
+sin convertir la primera predicción a una máscara que se reinserta. No cambia
+las opciones internas de memoria del modelo ni implica memoria probabilística.
+``input_mode='upstream_uint8'`` ensaya cuantización uint8 e interpolación PIL
+bicúbica del loader RECIST. Conserva nuestra ventana HU fija y no implica que
+esa ventana estuviera definida en el NPZ oficial. El modo previo sigue por defecto.
 """
     if type(refine_boundary) is not bool or (intermediates is not None and not isinstance(intermediates, dict)):
         raise ValueError('Provide a boolean refinement flag and an optional artifacts dictionary.')
+    if type(prompt_mode) is not str or prompt_mode not in ('binary_reinjection', 'box'):
+        raise ValueError('Prompt mode must be binary_reinjection or box.')
+    if type(input_mode) is not str or input_mode not in ('float_bilinear', 'upstream_uint8'):
+        raise ValueError('Input mode must be float_bilinear or upstream_uint8.')
     started = time.perf_counter()
     diagnostics = {'method': 'efficient_medsam2_tiny', 'status': 'evaluating',
+                   'prompt_conditioning': prompt_mode,
                    'source_intensities': 'POST_native_HU', 'source_mask_usage': 'localization_only',
                    'settings': {'configuration': CONFIG, 'configuration_sha256': CONFIG_SHA256,
                                 'device': 'cpu', 'threads': 2,
@@ -193,10 +222,21 @@ del campo realmente inferido. No contiene puntuaciones ficticias fuera de él.
                                 'model_input_shape_yx': [MODEL_SIZE, MODEL_SIZE],
                                 'normalization_mean': [.485, .456, .406],
                                 'normalization_std': [.229, .224, .225],
-                                'input_resize': 'bilinear_align_corners_false_if_needed',
+                                'input_mode': input_mode,
+                                'input_resize': ('pil_rgb_bicubic_if_needed' if input_mode == 'upstream_uint8'
+                                                 else 'bilinear_align_corners_false_if_needed'),
+                                'input_quantization': ('clip_window_times_255_truncate_uint8'
+                                                       if input_mode == 'upstream_uint8' else 'none'),
+                                'input_normalization_precision': ('float64_then_float32'
+                                                                  if input_mode == 'upstream_uint8' else 'float32'),
                                 'output_grid': 'native_POST', 'initial_threshold_logit': 0,
                                 'output_rule': 'post_native_logit_band_graph_cut' if refine_boundary else 'logit_gt_zero',
                                 'propagation': 'all_POST_slices_bidirectional',
+                                'prompt_mode': prompt_mode,
+                                'initial_prompt': 'registered_box',
+                                'propagation_conditioning': ('binary_mask_from_box_prediction'
+                                    if prompt_mode == 'binary_reinjection' else 'registered_box'),
+                                'model_memory_settings_overridden': False,
                                 'context_minimum_mm': MIN_CONTEXT_MM,
                                 'context_rule': 'max(160 mm, 2 * largest localized XY box side in mm)',
                                 'cuda_hole_filling': False, 'max_seconds': MAX_SECONDS},
@@ -234,7 +274,8 @@ del campo realmente inferido. No contiene puntuaciones ficticias fuera de él.
         diagnostics['model'] = provenance
         diagnostics['software'] = {'torch': torch.__version__, 'torchvision': version('torchvision'),
                                    'hydra-core': version('hydra-core'), 'numpy': np.__version__}
-        frames = _NativeFrames(post_hu[field], None if valid_mask is None else valid_mask[field], torch)
+        frames = _NativeFrames(post_hu[field], None if valid_mask is None else valid_mask[field], torch,
+                               input_mode=input_mode)
         mask = np.zeros(post_hu.shape, dtype=bool)
         scores = np.empty((len(post_hu), *field_shape), dtype=np.float32)
         seen = np.zeros(len(post_hu), dtype=bool)
@@ -249,7 +290,15 @@ del campo realmente inferido. No contiene puntuaciones ficticias fuera de él.
                 if reverse:
                     predictor.reset_state(state)
                     state = predictor.init_state(frames, *field_shape)
-                predictor.add_new_mask(state, frame_idx=z, obj_id=1, mask=prompt)
+                    if prompt_mode == 'box':
+                        _, _, reverse_logits = predictor.add_new_points_or_box(
+                            state, frame_idx=z, obj_id=1, box=box)
+                        reverse_scores = _scores_from_logits(reverse_logits, field_shape, diagnostics)
+                        if not (reverse_scores > 0).any():
+                            _fail('The reverse pass could not identify a region at the registered box.',
+                                  'empty_reverse_prompt', diagnostics)
+                if prompt_mode == 'binary_reinjection':
+                    predictor.add_new_mask(state, frame_idx=z, obj_id=1, mask=prompt)
                 for index, _, logits in predictor.propagate_in_video(state, start_frame_idx=z, reverse=reverse):
                     if time.perf_counter()-started > MAX_SECONDS:
                         _fail('POST prediction exceeded its execution time limit.', 'time_limit', diagnostics)

@@ -56,6 +56,8 @@ En **Segmentation → Follow-up**, selecciona una máscara guardada y pulsa **3D
 
 La [revisión de HCC_006 por cortes](docs/research/hcc006-slice-review.md) documenta los 16 planos ocupados y sus vecinos, con descriptores de los 103 cortes. Identifica una extensión gris de pertenencia incierta, una discontinuidad entre los cortes 55–56 del visor y pequeñas componentes y huecos. La [guía de la superficie 3D](docs/research/lesion-surface.md) explica geometría, controles, límites y pruebas. Ninguna de estas comprobaciones sustituye la referencia anatómica independiente.
 
+La [investigación de los cortes 55–56](docs/research/post-prompt-conditioning.md) compara el condicionamiento inicial, la política de seguimiento y la preparación de la entrada con una localización congelada. Cada comparación exige reproducir exactamente la máscara anterior y conserva resultados, diferencias por corte y fuentes verificadas. Las variantes experimentales no sustituyen automáticamente la candidata guardada.
+
 ## Generar una máscara POST con región y semilla
 
 Actualiza el contenedor con `docker compose up --build -d app`. Debajo de los visores encontrarás **Follow-up mask**:

@@ -11,6 +11,7 @@ Este espacio explica cómo investigar la delimitación de una lesión después d
 | 3 | [Resultados de desarrollo](../../experiments/ABLATION.md) | ¿Qué ocurrió con HCC_006 y el control HCC_002 al cambiar contexto, ventana y registro? |
 | 3a | [Refinamiento del borde POST](post-boundary-refinement.md) | ¿Cómo cambia la máscara con logits, HU y una banda física de 2 mm, y qué sigue sin comprobarse? |
 | 3b | [Revisión HCC_006 por cortes](hcc006-slice-review.md) | ¿Dónde persisten prolongaciones ambiguas, discontinuidades, componentes y huecos? |
+| 3c | [Investigar los cortes 55–56](post-prompt-conditioning.md) | ¿Influyen el prompt, el seguimiento o la preparación de la imagen? Comparaciones controladas y resultados negativos. |
 | 3c | [Superficie 3D de la máscara](lesion-surface.md) | ¿Cómo revisar la geometría guardada sin suavizar ni cambiar la predicción? |
 | 4 | [Reproducir los experimentos](../../experiments/README.md) | ¿Cómo ejecutar el CLI y leer su manifiesto, máscaras y diagnósticos? |
 | 5 | [Modelos y comparadores](post-tace-models.md) | ¿Qué aportaron nnInteractive y TotalSegmentator y cuáles son sus costes y límites? |

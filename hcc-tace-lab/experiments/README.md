@@ -59,6 +59,36 @@ python -m experiments.plot_boundary \
 
 Genera PNG, PDF y JSON sin sobrescribir salidas, tras verificar fuentes y hashes de raw/refinada de 2 mm. Compara TC, raw, refinada y diferencias en planos axiales, coronal y sagital, con proporción física y ventana fija de nivel 40/ancho 400 HU. No produce una referencia experta ni guarda candidatas en la app.
 
+## Cortes 55–56: condicionamiento, seguimiento y entrada
+
+`post_prompt_conditioning` compara tres hipótesis por separado con una localización ya congelada. Primero exige reproducir **exactamente** raw y refinada de 2 mm del baseline. Después cambia una política declarada, sin recalcular registro ni alterar las TC o candidatas de la app. La [investigación completa](../docs/research/post-prompt-conditioning.md) documenta mecanismos, resultados y límites.
+
+Con la imagen construida desde el código actual:
+
+```bash
+mkdir -p ../output/post-prompt-conditioning
+docker compose run --rm --no-deps -T \
+  --volume "$PWD/experiments:/app/experiments:ro" \
+  --volume "$PWD/../output/post-boundary:/frozen-boundary:ro" \
+  --volume "$PWD/../output/post-prompt-conditioning:/experiment-output" \
+  --entrypoint python app -m experiments.post_prompt_conditioning \
+  --data /data \
+  --baseline /frozen-boundary/run-20261113T211925-17cd15d6 \
+  --output /experiment-output --after box
+```
+
+Los valores de `--after` son `box`, `single_tracking` y `upstream_input`. Se ejecutan en procesos separados y secuenciales. `--probe` registra las alternativas del decoder sin modificar su selección. Para HCC_002 se usa el baseline `run-20261113T212052-93e1217e`. Esos identificadores corresponden a los ensayos locales documentados; otra instalación debe producir y usar su propio baseline con `post_boundary`.
+
+El plotter verifica los hashes de la TC y de los artefactos antes de generar figuras. En el entorno de figuras con `requirements-figures.txt`:
+
+```bash
+python -m experiments.plot_prompt_conditioning \
+  --data /data --run /experiment-output/run-identificador \
+  --output /research-output/comparison
+```
+
+Produce comparaciones axiales de los cortes 54–57, planos coronal y sagital, atlas de toda la extensión de ambas máscaras con vecinos, y descriptores de **todos** los cortes adquiridos en CSV/JSON. Las ventanas de visualización W400/L40 y W800/L200 se mantienen iguales entre brazos y no cambian la ventana usada para inferir. Los contornos corresponden a los píxeles originales, sin suavizado de presentación. Antes/después significa versiones del algoritmo sobre la misma TC POST, nunca evolución del tumor ni precisión frente a una referencia.
+
 ## Variantes declaradas
 
 | Variante | Registro | Contexto XY de entrada | Nivel/ancho HU |
